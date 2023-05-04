@@ -48,8 +48,6 @@ func tryDecodeStatusMessage(msg *p2p.Msg) (*eth.StatusPacket, error) {
 	return &reply, nil
 }
 
-var NetworkIdMissmatchErr = fmt.Errorf("network id does not match")
-
 func checkPeerStatusCompatibility(
 	reply *eth.StatusPacket,
 	status *proto_sentry.StatusData,
@@ -58,7 +56,7 @@ func checkPeerStatusCompatibility(
 ) error {
 	networkID := status.NetworkId
 	if reply.NetworkID != networkID {
-		return fmt.Errorf("%w: theirs %d, ours %d", NetworkIdMissmatchErr, reply.NetworkID, networkID)
+		return fmt.Errorf("network id does not match: theirs %d, ours %d", reply.NetworkID, networkID)
 	}
 
 	if uint(reply.ProtocolVersion) > version {

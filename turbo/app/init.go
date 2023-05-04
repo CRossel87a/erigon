@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/log/v3"
 	"github.com/urfave/cli/v2"
 
@@ -46,7 +45,7 @@ func initGenesis(ctx *cli.Context) error {
 	}
 	defer file.Close()
 
-	genesis := new(types.Genesis)
+	genesis := new(core.Genesis)
 	if err := json.NewDecoder(file).Decode(genesis); err != nil {
 		utils.Fatalf("invalid genesis file: %v", err)
 	}
@@ -55,7 +54,7 @@ func initGenesis(ctx *cli.Context) error {
 	stack := MakeConfigNodeDefault(ctx)
 	defer stack.Close()
 
-	chaindb, err := node.OpenDatabase(stack.Config(), kv.ChainDB)
+	chaindb, err := node.OpenDatabase(stack.Config(), log.New(ctx), kv.ChainDB)
 	if err != nil {
 		utils.Fatalf("Failed to open database: %v", err)
 	}

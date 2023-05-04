@@ -78,8 +78,8 @@ func (s *Sentinel) listenForPeers() {
 	iterator := s.listener.RandomNodes()
 	defer iterator.Close()
 	for {
-		if err := s.ctx.Err(); err != nil {
-			log.Debug("Stopping Ethereum 2.0 peer discovery", "err", err)
+
+		if s.ctx.Err() != nil {
 			break
 		}
 		if s.HasTooManyPeers() {
@@ -89,7 +89,7 @@ func (s *Sentinel) listenForPeers() {
 		}
 		exists := iterator.Next()
 		if !exists {
-			continue
+			break
 		}
 		node := iterator.Node()
 		peerInfo, _, err := convertToAddrInfo(node)

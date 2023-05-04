@@ -17,7 +17,6 @@
 package runtime
 
 import (
-	"context"
 	"fmt"
 	"math/big"
 	"os"
@@ -36,6 +35,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/tracers/logger"
+	"github.com/ledgerwatch/erigon/ethdb/olddb"
 )
 
 func TestDefaults(t *testing.T) {
@@ -152,17 +152,13 @@ func BenchmarkCall(b *testing.B) {
 		b.Fatal(err)
 	}
 	cfg := &Config{}
-	db := memdb.New("")
+	db := olddb.NewObjectDatabase(memdb.New(""))
 	defer db.Close()
-	tx, err := db.BeginRw(context.Background())
-	if err != nil {
-		panic(err)
-	}
-	defer tx.Rollback()
-	cfg.r = state.NewPlainStateReader(tx)
-	cfg.w = state.NewPlainStateWriter(tx, tx, 0)
+	cfg.r = state.NewDbStateReader(db)
+	cfg.w = state.NewDbStateWriter(db, 0)
 	cfg.State = state.New(cfg.r)
 
+	cfg.State = state.New(cfg.r)
 	cfg.Debug = true
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -173,8 +169,8 @@ func BenchmarkCall(b *testing.B) {
 		}
 	}
 }
-func benchmarkEVM_Create(b *testing.B, code string) {
-	_, tx := memdb.NewTestTx(b)
+func benchmarkEVM_Create(bench *testing.B, code string) {
+	_, tx := memdb.NewTestTx(bench)
 	var (
 		statedb  = state.New(state.NewPlainState(tx, 1, nil))
 		sender   = libcommon.BytesToAddress([]byte("sender"))
@@ -196,17 +192,19 @@ func benchmarkEVM_Create(b *testing.B, code string) {
 			HomesteadBlock:        new(big.Int),
 			ByzantiumBlock:        new(big.Int),
 			ConstantinopleBlock:   new(big.Int),
+			DAOForkBlock:          new(big.Int),
+			DAOForkSupport:        false,
 			TangerineWhistleBlock: new(big.Int),
 			SpuriousDragonBlock:   new(big.Int),
 		},
 		EVMConfig: vm.Config{},
 	}
 	// Warm up the intpools and stuff
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	bench.ResetTimer()
+	for i := 0; i < bench.N; i++ {
 		_, _, _ = Call(receiver, []byte{}, &runtimeConfig)
 	}
-	b.StopTimer()
+	bench.StopTimer()
 }
 
 func BenchmarkEVM_CREATE_500(bench *testing.B) {
@@ -338,7 +336,7 @@ func TestBlockhash(t *testing.T) {
 
 // benchmarkNonModifyingCode benchmarks code, but if the code modifies the
 // state, this should not be used, since it does not reset the state between runs.
-func benchmarkNonModifyingCode(b *testing.B, gas uint64, code []byte, name string) { //nolint:unparam
+func benchmarkNonModifyingCode(gas uint64, code []byte, name string, b *testing.B) { //nolint:unparam
 	cfg := new(Config)
 	setDefaults(cfg)
 	_, tx := memdb.NewTestTx(b)
@@ -483,12 +481,12 @@ func BenchmarkSimpleLoop(b *testing.B) {
 	//		Tracer: tracer,
 	//	}})
 	// 100M gas
-	benchmarkNonModifyingCode(b, 100000000, staticCallIdentity, "staticcall-identity-100M")
-	benchmarkNonModifyingCode(b, 100000000, callIdentity, "call-identity-100M")
-	benchmarkNonModifyingCode(b, 100000000, loopingCode, "loop-100M")
-	benchmarkNonModifyingCode(b, 100000000, callInexistant, "call-nonexist-100M")
-	benchmarkNonModifyingCode(b, 100000000, callEOA, "call-EOA-100M")
-	benchmarkNonModifyingCode(b, 100000000, calllRevertingContractWithInput, "call-reverting-100M")
+	benchmarkNonModifyingCode(100000000, staticCallIdentity, "staticcall-identity-100M", b)
+	benchmarkNonModifyingCode(100000000, callIdentity, "call-identity-100M", b)
+	benchmarkNonModifyingCode(100000000, loopingCode, "loop-100M", b)
+	benchmarkNonModifyingCode(100000000, callInexistant, "call-nonexist-100M", b)
+	benchmarkNonModifyingCode(100000000, callEOA, "call-EOA-100M", b)
+	benchmarkNonModifyingCode(100000000, calllRevertingContractWithInput, "call-reverting-100M", b)
 
 	//benchmarkNonModifyingCode(10000000, staticCallIdentity, "staticcall-identity-10M", b)
 	//benchmarkNonModifyingCode(10000000, loopingCode, "loop-10M", b)

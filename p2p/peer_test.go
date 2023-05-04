@@ -28,10 +28,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ledgerwatch/log/v3"
-
 	"github.com/ledgerwatch/erigon/p2p/enode"
 	"github.com/ledgerwatch/erigon/p2p/enr"
+	"github.com/ledgerwatch/log/v3"
 )
 
 var discard = Protocol{
@@ -99,7 +98,7 @@ func testPeer(protos []Protocol) (func(), *conn, *Peer, <-chan error) {
 		c2.caps = append(c2.caps, p.cap())
 	}
 
-	peer := newPeer(log.Root(), c1, protos, [64]byte{1}, true)
+	peer := newPeer(log.Root(), c1, protos, [64]byte{1})
 	errc := make(chan error, 1)
 	go func() {
 		_, err := peer.run()
@@ -251,7 +250,7 @@ func TestNewPeer(t *testing.T) {
 	name := "nodename"
 	caps := []Cap{{"foo", 2}, {"bar", 3}}
 	id := randomID()
-	p := NewPeer(id, [64]byte{1}, name, caps, true)
+	p := NewPeer(id, [64]byte{1}, name, caps)
 	if p.ID() != id {
 		t.Errorf("ID mismatch: got %v, expected %v", p.ID(), id)
 	}

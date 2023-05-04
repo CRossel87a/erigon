@@ -28,15 +28,15 @@ import (
 
 	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/erigon-lib/chain"
-	"github.com/ledgerwatch/erigon-lib/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/datadir"
 	"github.com/ledgerwatch/erigon-lib/downloader/downloadercfg"
-	"github.com/ledgerwatch/erigon-lib/txpool/txpoolcfg"
+	txpool2 "github.com/ledgerwatch/erigon-lib/txpool"
 
-	"github.com/ledgerwatch/erigon/consensus/ethash/ethashcfg"
-	"github.com/ledgerwatch/erigon/core/types"
+	"github.com/ledgerwatch/erigon/consensus/ethash"
+	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/eth/ethconfig/estimate"
-	"github.com/ledgerwatch/erigon/eth/gasprice/gaspricecfg"
+	"github.com/ledgerwatch/erigon/eth/gasprice"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/params/networkname"
@@ -47,36 +47,36 @@ const HistoryV3AggregationStep = 3_125_000 // 100M / 32
 //const HistoryV3AggregationStep = 3_125_000 / 100 // use this to reduce step size for dev/debug
 
 // FullNodeGPO contains default gasprice oracle settings for full node.
-var FullNodeGPO = gaspricecfg.Config{
+var FullNodeGPO = gasprice.Config{
 	Blocks:           20,
 	Default:          big.NewInt(0),
 	Percentile:       60,
 	MaxHeaderHistory: 0,
 	MaxBlockHistory:  0,
-	MaxPrice:         gaspricecfg.DefaultMaxPrice,
-	IgnorePrice:      gaspricecfg.DefaultIgnorePrice,
+	MaxPrice:         gasprice.DefaultMaxPrice,
+	IgnorePrice:      gasprice.DefaultIgnorePrice,
 }
 
 // LightClientGPO contains default gasprice oracle settings for light client.
-var LightClientGPO = gaspricecfg.Config{
+var LightClientGPO = gasprice.Config{
 	Blocks:           2,
 	Percentile:       60,
 	MaxHeaderHistory: 300,
 	MaxBlockHistory:  5,
-	MaxPrice:         gaspricecfg.DefaultMaxPrice,
-	IgnorePrice:      gaspricecfg.DefaultIgnorePrice,
+	MaxPrice:         gasprice.DefaultMaxPrice,
+	IgnorePrice:      gasprice.DefaultIgnorePrice,
 }
 
 // Defaults contains default settings for use on the Ethereum main net.
 var Defaults = Config{
 	Sync: Sync{
 		UseSnapshots:               false,
-		ExecWorkerCount:            estimate.ReconstituteState.WorkersHalf(), //only half of CPU, other half will spend for snapshots build/merge/prune
+		ExecWorkerCount:            2,
 		ReconWorkerCount:           estimate.ReconstituteState.Workers(),
 		BodyCacheLimit:             256 * 1024 * 1024,
 		BodyDownloadTimeoutSeconds: 30,
 	},
-	Ethash: ethashcfg.Config{
+	Ethash: ethash.Config{
 		CachesInMem:      2,
 		CachesLockMmap:   false,
 		DatasetsInMem:    1,
@@ -90,7 +90,7 @@ var Defaults = Config{
 		GasPrice: big.NewInt(params.GWei),
 		Recommit: 3 * time.Second,
 	},
-	DeprecatedTxPool: DeprecatedDefaultTxPoolConfig,
+	DeprecatedTxPool: core.DeprecatedDefaultTxPoolConfig,
 	RPCGasCap:        50000000,
 	GPO:              FullNodeGPO,
 	RPCTxFeeCap:      1, // 1 ether
@@ -168,7 +168,7 @@ type Config struct {
 
 	// The genesis block, which is inserted if the database is empty.
 	// If nil, the Ethereum main net block is used.
-	Genesis *types.Genesis `toml:",omitempty"`
+	Genesis *core.Genesis `toml:",omitempty"`
 
 	// Protocol options
 	NetworkID uint64 // Network ID to use for selecting peers to connect to
@@ -184,7 +184,7 @@ type Config struct {
 
 	ImportMode bool
 
-	BadBlockHash common.Hash // hash of the block marked as bad
+	BadBlockHash libcommon.Hash // hash of the block marked as bad
 
 	Snapshot   Snapshot
 	Downloader *downloadercfg.Cfg
@@ -196,24 +196,25 @@ type Config struct {
 	ExternalSnapshotDownloaderAddr string
 
 	// Whitelist of required block number -> hash values to accept
-	Whitelist map[uint64]common.Hash `toml:"-"`
+	Whitelist map[uint64]libcommon.Hash `toml:"-"`
 
 	// Mining options
 	Miner params.MiningConfig
 
 	// Ethash options
-	Ethash ethashcfg.Config
+	Ethash ethash.Config
 
 	Clique params.ConsensusSnapshotConfig
 	Aura   chain.AuRaConfig
+	Parlia chain.ParliaConfig
 	Bor    chain.BorConfig
 
 	// Transaction pool options
-	DeprecatedTxPool DeprecatedTxPoolConfig
-	TxPool           txpoolcfg.Config
+	DeprecatedTxPool core.TxPoolConfig
+	TxPool           txpool2.Config
 
 	// Gas Price Oracle options
-	GPO gaspricecfg.Config
+	GPO gasprice.Config
 
 	// RPCGasCap is the global gas cap for eth-call variants.
 	RPCGasCap uint64 `toml:",omitempty"`
@@ -241,7 +242,7 @@ type Config struct {
 	// Ethstats service
 	Ethstats string
 	// Consensus layer
-	InternalCL                  bool
+	ExternalCL                  bool
 	LightClientDiscoveryAddr    string
 	LightClientDiscoveryPort    uint64
 	LightClientDiscoveryTCPPort uint64
@@ -268,6 +269,7 @@ type Sync struct {
 var ChainsWithSnapshots = map[string]struct{}{
 	networkname.MainnetChainName:    {},
 	networkname.SepoliaChainName:    {},
+	networkname.BSCChainName:        {},
 	networkname.GoerliChainName:     {},
 	networkname.MumbaiChainName:     {},
 	networkname.BorMainnetChainName: {},

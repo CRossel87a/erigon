@@ -25,12 +25,6 @@ func (p ParticipationFlagsList) Bytes() []byte {
 	return b
 }
 
-func (p ParticipationFlagsList) Copy() ParticipationFlagsList {
-	c := make(ParticipationFlagsList, len(p))
-	copy(c, p)
-	return c
-}
-
 func ParticipationFlagsListFromBytes(buf []byte) ParticipationFlagsList {
 	flagsList := make([]ParticipationFlags, len(buf))
 	for i := range flagsList {

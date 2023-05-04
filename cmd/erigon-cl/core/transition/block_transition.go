@@ -10,57 +10,36 @@ import (
 	"github.com/ledgerwatch/erigon/cmd/erigon-cl/core/state"
 )
 
-// processBlock takes a block and transitions the state to the next slot, using the provided execution payload if enabled.
+// processBlock takes a block and transition said block. Important: it assumes execution payload is correct.
 func processBlock(state *state.BeaconState, signedBlock *cltypes.SignedBeaconBlock, fullValidation bool) error {
 	block := signedBlock.Block
-	version := state.Version()
-	// Check the state version is correct.
-	if signedBlock.Version() != version {
-		return fmt.Errorf("processBlock: wrong state version for block at slot %d", block.Slot)
+	if signedBlock.Version() != state.Version() {
+		return fmt.Errorf("wrong state version for block at slot %d", block.Slot)
 	}
-
-	// Process the block header.
 	if err := ProcessBlockHeader(state, block, fullValidation); err != nil {
-		return fmt.Errorf("processBlock: failed to process block header: %v", err)
+		return fmt.Errorf("ProcessBlockHeader: %s", err)
 	}
-
-	// Process execution payload if enabled.
-	if version >= clparams.BellatrixVersion && executionEnabled(state, block.Body.ExecutionPayload) {
-		if state.Version() >= clparams.CapellaVersion {
-			// Process withdrawals in the execution payload.
-			if err := ProcessWithdrawals(state, block.Body.ExecutionPayload.Withdrawals, fullValidation); err != nil {
-				return fmt.Errorf("processBlock: failed to process withdrawals: %v", err)
-			}
-		}
-
-		// Process the execution payload.
+	if state.Version() >= clparams.BellatrixVersion && executionEnabled(state, block.Body.ExecutionPayload) {
 		if err := ProcessExecutionPayload(state, block.Body.ExecutionPayload); err != nil {
-			return fmt.Errorf("processBlock: failed to process execution payload: %v", err)
+			return err
 		}
 	}
-
-	// Process RANDAO reveal.
 	if err := ProcessRandao(state, block.Body.RandaoReveal, block.ProposerIndex, fullValidation); err != nil {
-		return fmt.Errorf("processBlock: failed to process RANDAO reveal: %v", err)
+		return fmt.Errorf("ProcessRandao: %s", err)
 	}
-
-	// Process Eth1 data.
 	if err := ProcessEth1Data(state, block.Body.Eth1Data); err != nil {
-		return fmt.Errorf("processBlock: failed to process Eth1 data: %v", err)
+		return fmt.Errorf("ProcessEth1Data: %s", err)
 	}
-
-	// Process block body operations.
+	// Do operationns
 	if err := processOperations(state, block.Body, fullValidation); err != nil {
-		return fmt.Errorf("processBlock: failed to process block body operations: %v", err)
+		return fmt.Errorf("processOperations: %s", err)
 	}
-
-	// Process sync aggregate in case of Altair version.
-	if version >= clparams.AltairVersion {
+	// Process altair data
+	if state.Version() >= clparams.AltairVersion {
 		if err := ProcessSyncAggregate(state, block.Body.SyncAggregate, fullValidation); err != nil {
-			return fmt.Errorf("processBlock: failed to process sync aggregate: %v", err)
+			return fmt.Errorf("ProcessSyncAggregate: %s", err)
 		}
 	}
-
 	return nil
 }
 
@@ -96,13 +75,6 @@ func processOperations(state *state.BeaconState, blockBody *cltypes.BeaconBody, 
 			return fmt.Errorf("ProcessVoluntaryExit: %s", err)
 		}
 	}
-
-	// Process each execution change. this will only have entries after the capella fork.
-	for _, addressChange := range blockBody.ExecutionChanges {
-		if err := ProcessBlsToExecutionChange(state, addressChange, fullValidation); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -117,24 +89,20 @@ func maximumDeposits(state *state.BeaconState) (maxDeposits uint64) {
 // ProcessExecutionPayload sets the latest payload header accordinly.
 func ProcessExecutionPayload(state *state.BeaconState, payload *cltypes.Eth1Block) error {
 	if state.IsMergeTransitionComplete() {
-		if payload.ParentHash != state.LatestExecutionPayloadHeader().BlockHash {
+		if payload.Header.ParentHash != state.LatestExecutionPayloadHeader().BlockHashCL {
 			return fmt.Errorf("ProcessExecutionPayload: invalid eth1 chain. mismatching parent")
 		}
 	}
-	if payload.PrevRandao != state.GetRandaoMixes(state.Epoch()) {
+	if payload.Header.MixDigest != state.GetRandaoMixes(state.Epoch()) {
 		return fmt.Errorf("ProcessExecutionPayload: randao mix mismatches with mix digest")
 	}
-	if payload.Time != state.ComputeTimestampAtSlot(state.Slot()) {
+	if payload.Header.Time != state.ComputeTimestampAtSlot(state.Slot()) {
 		return fmt.Errorf("ProcessExecutionPayload: invalid Eth1 timestamp")
 	}
-	payloadHeader, err := payload.PayloadHeader()
-	if err != nil {
-		return err
-	}
-	state.SetLatestExecutionPayloadHeader(payloadHeader)
+	state.SetLatestExecutionPayloadHeader(payload.Header)
 	return nil
 }
 
 func executionEnabled(state *state.BeaconState, payload *cltypes.Eth1Block) bool {
-	return (!state.IsMergeTransitionComplete() && payload.BlockHash != libcommon.Hash{}) || state.IsMergeTransitionComplete()
+	return (!state.IsMergeTransitionComplete() && payload.Header.Root != libcommon.Hash{}) || state.IsMergeTransitionComplete()
 }

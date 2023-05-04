@@ -14,11 +14,12 @@ import (
 )
 
 type StateReconWriterInc struct {
-	as      *libstate.AggregatorStep
-	rs      *ReconState
-	txNum   uint64
-	tx      kv.Tx
-	chainTx kv.Tx
+	as        *libstate.AggregatorStep
+	rs        *ReconState
+	txNum     uint64
+	tx        kv.Tx
+	chainTx   kv.Tx
+	composite []byte
 }
 
 func NewStateReconWriterInc(as *libstate.AggregatorStep, rs *ReconState) *StateReconWriterInc {

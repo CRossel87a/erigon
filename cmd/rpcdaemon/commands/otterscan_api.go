@@ -8,16 +8,14 @@ import (
 	"sync"
 
 	"github.com/holiman/uint256"
-	"github.com/ledgerwatch/log/v3"
-
 	"github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/iter"
 	"github.com/ledgerwatch/erigon-lib/kv/order"
 	"github.com/ledgerwatch/erigon-lib/kv/rawdbv3"
 	"github.com/ledgerwatch/erigon/core/state/temporal"
+	"github.com/ledgerwatch/log/v3"
 
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/consensus/ethash"
@@ -51,7 +49,7 @@ type OtterscanAPI interface {
 	GetBlockTransactions(ctx context.Context, number rpc.BlockNumber, pageNumber uint8, pageSize uint8) (map[string]interface{}, error)
 	HasCode(ctx context.Context, address common.Address, blockNrOrHash rpc.BlockNumberOrHash) (bool, error)
 	TraceTransaction(ctx context.Context, hash common.Hash) ([]*TraceEntry, error)
-	GetTransactionError(ctx context.Context, hash common.Hash) (hexutility.Bytes, error)
+	GetTransactionError(ctx context.Context, hash common.Hash) (hexutil.Bytes, error)
 	GetTransactionBySenderAndNonce(ctx context.Context, addr common.Address, nonce uint64) (*common.Hash, error)
 	GetContractCreator(ctx context.Context, addr common.Address) (*ContractCreatorData, error)
 }
@@ -269,15 +267,15 @@ func (api *OtterscanAPIImpl) searchTransactionsBeforeV3(tx kv.TemporalTx, ctx co
 	if err != nil {
 		return nil, err
 	}
-	itTo, err := tx.IndexRange(temporal.TracesToIdx, addr[:], int(fromTxNum), -1, order.Desc, kv.Unlim)
+	itTo, err := tx.IndexRange(temporal.TracesToIdx, addr[:], int(fromTxNum), -1, order.Desc, -1)
 	if err != nil {
 		return nil, err
 	}
-	itFrom, err := tx.IndexRange(temporal.TracesFromIdx, addr[:], int(fromTxNum), -1, order.Desc, kv.Unlim)
+	itFrom, err := tx.IndexRange(temporal.TracesFromIdx, addr[:], int(fromTxNum), -1, order.Desc, -1)
 	if err != nil {
 		return nil, err
 	}
-	txNums := iter.Union[uint64](itFrom, itTo, order.Desc, kv.Unlim)
+	txNums := iter.Union[uint64](itFrom, itTo)
 	txNumsIter := MapDescendTxNum2BlockNum(tx, txNums)
 
 	exec := txnExecutor(tx, chainConfig, api.engine(), api._blockReader, nil)

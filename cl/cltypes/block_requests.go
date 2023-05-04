@@ -3,7 +3,7 @@ package cltypes
 import (
 	"fmt"
 
-	"github.com/ledgerwatch/erigon/cl/cltypes/ssz"
+	"github.com/ledgerwatch/erigon/cl/cltypes/ssz_utils"
 )
 
 const (
@@ -54,7 +54,7 @@ func (r *BeaconBlocksByRootRequest) DecodeSSZ(buf []byte) error {
 		return fmt.Errorf("expected buffer with length of upto %d but received length %d", maxLength, bufLen)
 	}
 	if bufLen%rootLength != 0 {
-		return ssz.ErrBufferNotRounded
+		return ssz_utils.ErrBufferNotRounded
 	}
 	numOfRoots := bufLen / rootLength
 	roots := make([][rootLength]byte, 0, numOfRoots)

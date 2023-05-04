@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/goccy/go-json"
-	lru "github.com/hashicorp/golang-lru/v2"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
@@ -40,7 +40,6 @@ import (
 	"github.com/ledgerwatch/erigon/common/debug"
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/consensus"
-	"github.com/ledgerwatch/erigon/consensus/misc"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
@@ -145,13 +144,13 @@ var (
 type SignerFn func(signer libcommon.Address, mimeType string, message []byte) ([]byte, error)
 
 // ecrecover extracts the Ethereum account address from a signed header.
-func ecrecover(header *types.Header, sigcache *lru.ARCCache[libcommon.Hash, libcommon.Address]) (libcommon.Address, error) {
+func ecrecover(header *types.Header, sigcache *lru.ARCCache) (libcommon.Address, error) {
 	// If the signature's already cached, return that
 	hash := header.Hash()
 
 	// hitrate while straight-forward sync is from 0.5 to 0.65
 	if address, known := sigcache.Peek(hash); known {
-		return address, nil
+		return address.(libcommon.Address), nil
 	}
 
 	// Retrieve the signature from the header extra-data
@@ -181,8 +180,8 @@ type Clique struct {
 	snapshotConfig *params.ConsensusSnapshotConfig // Consensus engine configuration parameters
 	db             kv.RwDB                         // Database to store and retrieve snapshot checkpoints
 
-	signatures *lru.ARCCache[libcommon.Hash, libcommon.Address] // Signatures of recent blocks to speed up mining
-	recents    *lru.ARCCache[libcommon.Hash, *Snapshot]         // Snapshots for recent block to speed up reorgs
+	signatures *lru.ARCCache // Signatures of recent blocks to speed up mining
+	recents    *lru.ARCCache // Snapshots for recent block to speed up reorgs
 
 	proposals map[libcommon.Address]bool // Current list of proposals we are pushing
 
@@ -207,8 +206,8 @@ func New(cfg *chain.Config, snapshotConfig *params.ConsensusSnapshotConfig, cliq
 		conf.Epoch = epochLength
 	}
 	// Allocate the snapshot caches and create the engine
-	recents, _ := lru.NewARC[libcommon.Hash, *Snapshot](snapshotConfig.InmemorySnapshots)
-	signatures, _ := lru.NewARC[libcommon.Hash, libcommon.Address](snapshotConfig.InmemorySignatures)
+	recents, _ := lru.NewARC(snapshotConfig.InmemorySnapshots)
+	signatures, _ := lru.NewARC(snapshotConfig.InmemorySignatures)
 
 	exitCh := make(chan struct{})
 
@@ -362,7 +361,7 @@ func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	return nil
 }
 
-func (c *Clique) Initialize(config *chain.Config, chain consensus.ChainHeaderReader, header *types.Header,
+func (c *Clique) Initialize(config *chain.Config, chain consensus.ChainHeaderReader, e consensus.EpochReader, header *types.Header,
 	state *state.IntraBlockState, txs []types.Transaction, uncles []*types.Header, syscall consensus.SystemCall) {
 }
 
@@ -370,17 +369,10 @@ func (c *Clique) Initialize(config *chain.Config, chain consensus.ChainHeaderRea
 // rewards given.
 func (c *Clique) Finalize(config *chain.Config, header *types.Header, state *state.IntraBlockState,
 	txs types.Transactions, uncles []*types.Header, r types.Receipts, withdrawals []*types.Withdrawal,
-	chain consensus.ChainHeaderReader, syscall consensus.SystemCall,
+	e consensus.EpochReader, chain consensus.ChainHeaderReader, syscall consensus.SystemCall,
 ) (types.Transactions, types.Receipts, error) {
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
 	header.UncleHash = types.CalcUncleHash(nil)
-	if config.IsCancun(header.Time) {
-		if parent := chain.GetHeaderByHash(header.ParentHash); parent != nil {
-			header.SetExcessDataGas(misc.CalcExcessDataGas(parent.ExcessDataGas, misc.CountBlobs(txs)))
-		} else {
-			header.SetExcessDataGas(new(big.Int))
-		}
-	}
 	return txs, r, nil
 }
 
@@ -388,7 +380,7 @@ func (c *Clique) Finalize(config *chain.Config, header *types.Header, state *sta
 // nor block rewards given, and returns the final block.
 func (c *Clique) FinalizeAndAssemble(chainConfig *chain.Config, header *types.Header, state *state.IntraBlockState,
 	txs types.Transactions, uncles []*types.Header, receipts types.Receipts, withdrawals []*types.Withdrawal,
-	chain consensus.ChainHeaderReader, syscall consensus.SystemCall, call consensus.Call,
+	e consensus.EpochReader, chain consensus.ChainHeaderReader, syscall consensus.SystemCall, call consensus.Call,
 ) (*types.Block, types.Transactions, types.Receipts, error) {
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
 	header.UncleHash = types.CalcUncleHash(nil)

@@ -1241,30 +1241,33 @@ func WriteBlock(db kv.RwTx, block *types.Block) error {
 // keeps genesis in db: [1, to)
 // doesn't change sequences of kv.EthTx and kv.NonCanonicalTxs
 // doesn't delete Receipts, Senders, Canonical markers, TotalDifficulty
-func DeleteAncientBlocks(tx kv.RwTx, blockTo uint64, blocksDeleteLimit int) error {
+// returns [deletedFrom, deletedTo)
+func DeleteAncientBlocks(tx kv.RwTx, blockTo uint64, blocksDeleteLimit int) (deletedFrom, deletedTo uint64, err error) {
 	c, err := tx.Cursor(kv.Headers)
 	if err != nil {
-		return err
+		return
 	}
 	defer c.Close()
 
 	// find first non-genesis block
 	firstK, _, err := c.Seek(hexutility.EncodeTs(1))
 	if err != nil {
-		return err
+		return
 	}
 	if firstK == nil { //nothing to delete
-		return err
+		return
 	}
 	blockFrom := binary.BigEndian.Uint64(firstK)
 	stopAtBlock := cmp.Min(blockTo, blockFrom+uint64(blocksDeleteLimit))
+	k, _, _ := c.Current()
+	deletedFrom = binary.BigEndian.Uint64(k)
 
 	var canonicalHash libcommon.Hash
 	var b *types.BodyForStorage
 
-	for k, _, err := c.Current(); k != nil; k, _, err = c.Next() {
+	for k, _, err = c.Current(); k != nil; k, _, err = c.Next() {
 		if err != nil {
-			return err
+			return
 		}
 
 		n := binary.BigEndian.Uint64(k)
@@ -1274,13 +1277,13 @@ func DeleteAncientBlocks(tx kv.RwTx, blockTo uint64, blocksDeleteLimit int) erro
 
 		canonicalHash, err = ReadCanonicalHash(tx, n)
 		if err != nil {
-			return err
+			return
 		}
 		isCanonical := bytes.Equal(k[8:], canonicalHash[:])
 
 		b, err = ReadBodyForStorageByKey(tx, k)
 		if err != nil {
-			return err
+			return
 		}
 		if b == nil {
 			log.Debug("DeleteAncientBlocks: block body not found", "height", n)
@@ -1293,7 +1296,7 @@ func DeleteAncientBlocks(tx kv.RwTx, blockTo uint64, blocksDeleteLimit int) erro
 					bucket = kv.NonCanonicalTxs
 				}
 				if err = tx.Delete(bucket, txIDBytes); err != nil {
-					return err
+					return
 				}
 			}
 		}
@@ -1301,14 +1304,17 @@ func DeleteAncientBlocks(tx kv.RwTx, blockTo uint64, blocksDeleteLimit int) erro
 		// for the next key and Delete below will end up deleting 1 more record than required
 		kCopy := common.CopyBytes(k)
 		if err = tx.Delete(kv.Headers, kCopy); err != nil {
-			return err
+			return
 		}
 		if err = tx.Delete(kv.BlockBody, kCopy); err != nil {
-			return err
+			return
 		}
 	}
 
-	return nil
+	k, _, _ = c.Current()
+	deletedTo = binary.BigEndian.Uint64(k)
+
+	return
 }
 
 // TruncateBlocks - delete block >= blockFrom

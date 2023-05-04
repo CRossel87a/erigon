@@ -8,10 +8,10 @@ import (
 	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/consensus/ethash/ethashcfg"
-	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/eth/gasprice/gaspricecfg"
 
+	"github.com/ledgerwatch/erigon/consensus/ethash"
+	"github.com/ledgerwatch/erigon/core"
+	"github.com/ledgerwatch/erigon/eth/gasprice"
 	"github.com/ledgerwatch/erigon/ethdb/prune"
 	"github.com/ledgerwatch/erigon/params"
 )
@@ -19,7 +19,7 @@ import (
 // MarshalTOML marshals as TOML.
 func (c Config) MarshalTOML() (interface{}, error) {
 	type Config struct {
-		Genesis                        *types.Genesis `toml:",omitempty"`
+		Genesis                        *core.Genesis `toml:",omitempty"`
 		NetworkID                      uint64
 		EthDiscoveryURLs               []string
 		P2PEnabled                     bool
@@ -32,11 +32,12 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		ExternalSnapshotDownloaderAddr string
 		Whitelist                      map[uint64]libcommon.Hash `toml:"-"`
 		Miner                          params.MiningConfig
-		Ethash                         ethashcfg.Config
+		Ethash                         ethash.Config
 		Clique                         params.ConsensusSnapshotConfig
 		Aura                           chain.AuRaConfig
-		TxPool                         DeprecatedTxPoolConfig
-		GPO                            gaspricecfg.Config
+		Parlia                         chain.ParliaConfig
+		TxPool                         core.TxPoolConfig
+		GPO                            gasprice.Config
 		RPCGasCap                      uint64  `toml:",omitempty"`
 		RPCTxFeeCap                    float64 `toml:",omitempty"`
 		StateStream                    bool
@@ -59,6 +60,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.Ethash = c.Ethash
 	enc.Clique = c.Clique
 	enc.Aura = c.Aura
+	enc.Parlia = c.Parlia
 	enc.TxPool = c.DeprecatedTxPool
 	enc.GPO = c.GPO
 	enc.RPCGasCap = c.RPCGasCap
@@ -70,7 +72,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 // UnmarshalTOML unmarshals from TOML.
 func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	type Config struct {
-		Genesis                        *types.Genesis `toml:",omitempty"`
+		Genesis                        *core.Genesis `toml:",omitempty"`
 		NetworkID                      *uint64
 		EthDiscoveryURLs               []string
 		P2PEnabled                     *bool
@@ -83,11 +85,12 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		ExternalSnapshotDownloaderAddr *string
 		Whitelist                      map[uint64]libcommon.Hash `toml:"-"`
 		Miner                          *params.MiningConfig
-		Ethash                         *ethashcfg.Config
+		Ethash                         *ethash.Config
 		Clique                         *params.ConsensusSnapshotConfig
 		Aura                           *chain.AuRaConfig
-		TxPool                         *DeprecatedTxPoolConfig
-		GPO                            *gaspricecfg.Config
+		Parlia                         *chain.ParliaConfig
+		TxPool                         *core.TxPoolConfig
+		GPO                            *gasprice.Config
 		RPCGasCap                      *uint64  `toml:",omitempty"`
 		RPCTxFeeCap                    *float64 `toml:",omitempty"`
 		StateStream                    *bool
@@ -142,6 +145,9 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.Aura != nil {
 		c.Aura = *dec.Aura
+	}
+	if dec.Parlia != nil {
+		c.Parlia = *dec.Parlia
 	}
 	if dec.TxPool != nil {
 		c.DeprecatedTxPool = *dec.TxPool

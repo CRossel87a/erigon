@@ -163,8 +163,7 @@ type Config struct {
 	TLSKeyFile          string
 	TLSCACert           string
 
-	MdbxPageSize    datasize.ByteSize
-	MdbxDBSizeLimit datasize.ByteSize
+	MdbxPageSize datasize.ByteSize
 
 	// HealthCheck enables standard grpc health check
 	HealthCheck bool

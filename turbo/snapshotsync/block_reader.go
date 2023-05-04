@@ -465,7 +465,6 @@ func (back *BlockReaderWithSnapshots) bodyFromSnapshot(blockHeight uint64, sn *B
 
 	body := new(types.Body)
 	body.Uncles = b.Uncles
-	body.Withdrawals = b.Withdrawals
 	var txsAmount uint32
 	if b.TxAmount >= 2 {
 		txsAmount = b.TxAmount - 2

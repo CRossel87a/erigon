@@ -84,7 +84,7 @@ func (api *GraphQLAPIImpl) GetBlockDetails(ctx context.Context, blockNumber rpc.
 		transaction["nonce"] = txn.GetNonce()
 		transaction["value"] = txn.GetValue()
 		transaction["data"] = txn.GetData()
-		transaction["logs"] = receipt.Logs
+		transaction["gasPrice"] = txn.GetPrice()
 		result = append(result, transaction)
 	}
 

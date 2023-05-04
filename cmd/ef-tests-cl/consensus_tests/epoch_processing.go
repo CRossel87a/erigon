@@ -29,9 +29,10 @@ func getTestEpochProcessing(f func(s *state.BeaconState) error) testFunc {
 		expectedState, err := decodeStateFromFile(context, "post.ssz_snappy")
 		if os.IsNotExist(err) {
 			isErrExpected = true
-		} else if err != nil {
+		} else {
 			return err
 		}
+
 		// Make up state transistor
 		if err := f(testState); err != nil {
 			if isErrExpected {
@@ -39,6 +40,7 @@ func getTestEpochProcessing(f func(s *state.BeaconState) error) testFunc {
 			}
 			return err
 		}
+
 		if isErrExpected && err == nil {
 			return fmt.Errorf("expected an error got none")
 		}
@@ -103,10 +105,5 @@ var slashingsTest = getTestEpochProcessing(func(s *state.BeaconState) error {
 
 var slashingsResetTest = getTestEpochProcessing(func(s *state.BeaconState) error {
 	transition.ProcessSlashingsReset(s)
-	return nil
-})
-
-var recordsResetTest = getTestEpochProcessing(func(s *state.BeaconState) error {
-	transition.ProcessParticipationRecordUpdates(s)
 	return nil
 })

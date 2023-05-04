@@ -17,7 +17,6 @@
 package tests
 
 import (
-	"context"
 	"math/big"
 	"testing"
 
@@ -25,6 +24,8 @@ import (
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ledgerwatch/erigon/ethdb/olddb"
 
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind/backends"
@@ -42,7 +43,7 @@ func TestSelfDestructReceive(t *testing.T) {
 		key, _  = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 		address = crypto.PubkeyToAddress(key.PublicKey)
 		funds   = big.NewInt(1000000000)
-		gspec   = &types.Genesis{
+		gspec   = &core.Genesis{
 			Config: &chain.Config{
 				ChainID:               big.NewInt(1),
 				HomesteadBlock:        new(big.Int),
@@ -51,7 +52,7 @@ func TestSelfDestructReceive(t *testing.T) {
 				TangerineWhistleBlock: new(big.Int),
 				SpuriousDragonBlock:   new(big.Int),
 			},
-			Alloc: types.GenesisAlloc{
+			Alloc: core.GenesisAlloc{
 				address: {Balance: funds},
 			},
 		}
@@ -60,6 +61,8 @@ func TestSelfDestructReceive(t *testing.T) {
 	)
 
 	m := stages.MockWithGenesis(t, gspec, key, false)
+	db := olddb.NewObjectDatabase(m.DB)
+	defer db.Close()
 
 	contractBackend := backends.NewTestSimulatedBackendWithConfig(t, gspec.Alloc, gspec.Config, gspec.GasLimit)
 	transactOpts, err := bind.NewKeyedTransactorWithChainID(key, m.ChainConfig.ChainID)
@@ -74,23 +77,23 @@ func TestSelfDestructReceive(t *testing.T) {
 	// The second block is empty and is only used to force the newly created blockchain object to reload the trie
 	// from the database.
 	chain, err := core.GenerateChain(m.ChainConfig, m.Genesis, m.Engine, m.DB, 2, func(i int, block *core.BlockGen) {
-		var txn types.Transaction
+		var tx types.Transaction
 
 		switch i {
 		case 0:
-			contractAddress, txn, selfDestructorContract, err = contracts.DeploySelfDestructor(transactOpts, contractBackend)
+			contractAddress, tx, selfDestructorContract, err = contracts.DeploySelfDestructor(transactOpts, contractBackend)
 			if err != nil {
 				t.Fatal(err)
 			}
-			block.AddTx(txn)
-			txn, err = selfDestructorContract.SelfDestruct(transactOpts)
+			block.AddTx(tx)
+			tx, err = selfDestructorContract.SelfDestruct(transactOpts)
 			if err != nil {
 				t.Fatal(err)
 			}
-			block.AddTx(txn)
+			block.AddTx(tx)
 			// Send 1 wei to contract after self-destruction
-			txn, err = types.SignTx(types.NewTransaction(block.TxNonce(address), contractAddress, uint256.NewInt(1000), 21000, uint256.NewInt(1), nil), *signer, key)
-			block.AddTx(txn)
+			tx, err = types.SignTx(types.NewTransaction(block.TxNonce(address), contractAddress, uint256.NewInt(1000), 21000, uint256.NewInt(1), nil), *signer, key)
+			block.AddTx(tx)
 		}
 		contractBackend.Commit()
 	}, false /* intermediateHashes */)
@@ -98,13 +101,7 @@ func TestSelfDestructReceive(t *testing.T) {
 		t.Fatalf("generate blocks: %v", err)
 	}
 
-	tx, err := m.DB.BeginRo(context.Background())
-	if err != nil {
-		panic(err)
-	}
-	defer tx.Rollback()
-
-	st := state.New(m.NewStateReader(tx))
+	st := state.New(state.NewPlainStateReader(db))
 	if !st.Exist(address) {
 		t.Error("expected account to exist")
 	}
@@ -125,12 +122,7 @@ func TestSelfDestructReceive(t *testing.T) {
 	// and that means that the state of the accounts written in the first block was correct.
 	// This test checks that the storage root of the account is properly set to the root of the empty tree
 
-	tx, err = m.DB.BeginRo(context.Background())
-	if err != nil {
-		panic(err)
-	}
-	defer tx.Rollback()
-	st = state.New(m.NewStateReader(tx))
+	st = state.New(state.NewPlainStateReader(db))
 	if !st.Exist(address) {
 		t.Error("expected account to exist")
 	}

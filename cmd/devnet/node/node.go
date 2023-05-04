@@ -78,13 +78,15 @@ func StartNode(wg *sync.WaitGroup, args []string) {
 
 // runNode configures, creates and serves an erigon node
 func runNode(ctx *cli.Context) error {
+	logger := log.New()
+
 	// Initializing the node and providing the current git commit there
-	log.Info("Build info", "git_branch", params.GitBranch, "git_tag", params.GitTag, "git_commit", params.GitCommit)
+	logger.Info("Build info", "git_branch", params.GitBranch, "git_tag", params.GitTag, "git_commit", params.GitCommit)
 
 	nodeCfg := node.NewNodConfigUrfave(ctx)
 	ethCfg := node.NewEthConfigUrfave(ctx, nodeCfg)
 
-	ethNode, err := node.New(nodeCfg, ethCfg)
+	ethNode, err := node.New(nodeCfg, ethCfg, logger)
 	if err != nil {
 		log.Error("Devnet startup", "err", err)
 		return err

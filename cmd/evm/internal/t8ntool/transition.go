@@ -28,22 +28,20 @@ import (
 	"path/filepath"
 
 	"github.com/holiman/uint256"
-	"github.com/ledgerwatch/log/v3"
-	"github.com/urfave/cli/v2"
-
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	"github.com/ledgerwatch/erigon-lib/common/length"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/kvcfg"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
+	"github.com/ledgerwatch/log/v3"
+	"github.com/urfave/cli/v2"
 
 	"github.com/ledgerwatch/erigon/cmd/rpcdaemon/commands"
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/consensus/ethash"
-	"github.com/ledgerwatch/erigon/consensus/serenity"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -89,9 +87,9 @@ var (
 )
 
 type input struct {
-	Alloc types.GenesisAlloc `json:"alloc,omitempty"`
-	Env   *stEnv             `json:"env,omitempty"`
-	Txs   []*txWithKey       `json:"txs,omitempty"`
+	Alloc core.GenesisAlloc `json:"alloc,omitempty"`
+	Env   *stEnv            `json:"env,omitempty"`
+	Txs   []*txWithKey      `json:"txs,omitempty"`
 }
 
 func Main(ctx *cli.Context) error {
@@ -233,28 +231,18 @@ func Main(ctx *cli.Context) error {
 		if prestate.Env.BaseFee == nil {
 			return NewError(ErrorVMConfig, errors.New("EIP-1559 config but missing 'currentBaseFee' in env section"))
 		}
-	} else {
-		prestate.Env.Random = nil
+	}
+
+	// Sanity check, to not `panic` in state_transition
+	if prestate.Env.Random != nil && !eip1559 {
+		return NewError(ErrorVMConfig, errors.New("can only apply RANDOM on top of London chain rules"))
 	}
 
 	if chainConfig.IsShanghai(prestate.Env.Timestamp) && prestate.Env.Withdrawals == nil {
 		return NewError(ErrorVMConfig, errors.New("Shanghai config but missing 'withdrawals' in env section"))
 	}
 
-	isMerged := chainConfig.TerminalTotalDifficulty != nil && chainConfig.TerminalTotalDifficulty.BitLen() == 0
-	env := prestate.Env
-	if isMerged {
-		// post-merge:
-		// - random must be supplied
-		// - difficulty must be zero
-		switch {
-		case env.Random == nil:
-			return NewError(ErrorVMConfig, errors.New("post-merge requires currentRandom to be defined in env"))
-		case env.Difficulty != nil && env.Difficulty.BitLen() != 0:
-			return NewError(ErrorVMConfig, errors.New("post-merge difficulty must be zero (or omitted) in env"))
-		}
-		prestate.Env.Difficulty = nil
-	} else if env.Difficulty == nil {
+	if env := prestate.Env; env.Difficulty == nil {
 		// If difficulty was not provided by caller, we need to calculate it.
 		switch {
 		case env.ParentDifficulty == nil:
@@ -294,7 +282,6 @@ func Main(ctx *cli.Context) error {
 		return h
 	}
 	db := memdb.New("" /* tmpDir */)
-	defer db.Close()
 
 	tx, err := db.BeginRw(context.Background())
 	if err != nil {
@@ -303,11 +290,9 @@ func Main(ctx *cli.Context) error {
 	defer tx.Rollback()
 
 	reader, writer := MakePreState(chainConfig.Rules(0, 0), tx, prestate.Pre)
-	// serenity engine can be used for pre-merge blocks as well, as it
-	// redirects to the ethash engine based on the block number
-	engine := serenity.New(&ethash.FakeEthash{})
+	engine := ethash.NewFaker()
 
-	result, err := core.ExecuteBlockEphemerally(chainConfig, &vmConfig, getHash, engine, block, reader, writer, nil, getTracer)
+	result, err := core.ExecuteBlockEphemerally(chainConfig, &vmConfig, getHash, engine, block, reader, writer, nil, nil, getTracer)
 
 	if hashError != nil {
 		return NewError(ErrorMissingBlockhash, fmt.Errorf("blockhash error: %v", err))
@@ -502,7 +487,7 @@ func signUnsignedTransactions(txs []*txWithKey, signer types.Signer) (types.Tran
 	return signedTxs, nil
 }
 
-type Alloc map[libcommon.Address]types.GenesisAccount
+type Alloc map[libcommon.Address]core.GenesisAccount
 
 func (g Alloc) OnRoot(libcommon.Hash) {}
 
@@ -515,7 +500,7 @@ func (g Alloc) OnAccount(addr libcommon.Address, dumpAccount state.DumpAccount) 
 			storage[libcommon.HexToHash(k)] = libcommon.HexToHash(v)
 		}
 	}
-	genesisAccount := types.GenesisAccount{
+	genesisAccount := core.GenesisAccount{
 		Code:    dumpAccount.Code,
 		Storage: storage,
 		Balance: balance,
@@ -540,7 +525,7 @@ func saveFile(baseDir, filename string, data interface{}) error {
 
 // dispatchOutput writes the output data to either stderr or stdout, or to the specified
 // files
-func dispatchOutput(ctx *cli.Context, baseDir string, result *core.EphemeralExecResult, alloc Alloc, body hexutility.Bytes) error {
+func dispatchOutput(ctx *cli.Context, baseDir string, result *core.EphemeralExecResult, alloc Alloc, body hexutil.Bytes) error {
 	stdOutObject := make(map[string]interface{})
 	stdErrObject := make(map[string]interface{})
 	dispatch := func(baseDir, fName, name string, obj interface{}) error {
@@ -586,16 +571,13 @@ func dispatchOutput(ctx *cli.Context, baseDir string, result *core.EphemeralExec
 
 func NewHeader(env stEnv) *types.Header {
 	var header types.Header
+	header.UncleHash = env.ParentUncleHash
 	header.Coinbase = env.Coinbase
 	header.Difficulty = env.Difficulty
-	header.GasLimit = env.GasLimit
 	header.Number = big.NewInt(int64(env.Number))
+	header.GasLimit = env.GasLimit
 	header.Time = env.Timestamp
 	header.BaseFee = env.BaseFee
-	header.MixDigest = env.MixDigest
-
-	header.UncleHash = env.UncleHash
-	header.WithdrawalsHash = env.WithdrawalsHash
 
 	return &header
 }

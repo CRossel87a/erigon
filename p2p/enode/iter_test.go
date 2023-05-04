@@ -240,11 +240,11 @@ func idPrefixDistribution(nodes []*Node) map[uint32]int {
 	return d
 }
 
-func approxEqual(x, y, epsilon int) bool {
+func approxEqual(x, y, ε int) bool {
 	if y > x {
 		x, y = y, x
 	}
-	return x-y > epsilon
+	return x-y > ε
 }
 
 // genIter creates fake nodes with numbered IDs based on 'index' and 'gen'

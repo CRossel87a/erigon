@@ -28,9 +28,7 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/hexutility"
-	"github.com/ledgerwatch/erigon/turbo/stages"
-	"github.com/stretchr/testify/require"
+	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/hexutil"
@@ -62,7 +60,7 @@ type callContext struct {
 type callLog struct {
 	Address libcommon.Address `json:"address"`
 	Topics  []libcommon.Hash  `json:"topics"`
-	Data    hexutility.Bytes  `json:"data"`
+	Data    hexutil.Bytes     `json:"data"`
 }
 
 // callTrace is the result of a callTracer run.
@@ -71,8 +69,8 @@ type callTrace struct {
 	Gas      *hexutil.Uint64   `json:"gas"`
 	GasUsed  *hexutil.Uint64   `json:"gasUsed"`
 	To       libcommon.Address `json:"to,omitempty"`
-	Input    hexutility.Bytes  `json:"input"`
-	Output   hexutility.Bytes  `json:"output,omitempty"`
+	Input    hexutil.Bytes     `json:"input"`
+	Output   hexutil.Bytes     `json:"output,omitempty"`
 	Error    string            `json:"error,omitempty"`
 	Revertal string            `json:"revertReason,omitempty"`
 	Calls    []callTrace       `json:"calls,omitempty"`
@@ -84,7 +82,7 @@ type callTrace struct {
 
 // callTracerTest defines a single test to check the call tracer against.
 type callTracerTest struct {
-	Genesis      *types.Genesis  `json:"genesis"`
+	Genesis      *core.Genesis   `json:"genesis"`
 	Context      *callContext    `json:"context"`
 	Input        string          `json:"input"`
 	TracerConfig json.RawMessage `json:"tracerConfig"`
@@ -149,13 +147,10 @@ func testCallTracer(tracerName string, dirPath string, t *testing.T) {
 					Difficulty:  (*big.Int)(test.Context.Difficulty),
 					GasLimit:    uint64(test.Context.GasLimit),
 				}
-				rules = test.Genesis.Config.Rules(context.BlockNumber, context.Time)
+				_, dbTx    = memdb.NewTestTx(t)
+				rules      = test.Genesis.Config.Rules(context.BlockNumber, context.Time)
+				statedb, _ = tests.MakePreState(rules, dbTx, test.Genesis.Alloc, uint64(test.Context.Number))
 			)
-			m := stages.Mock(t)
-			dbTx, err := m.DB.BeginRw(m.Ctx)
-			require.NoError(t, err)
-			defer dbTx.Rollback()
-			statedb, _ := tests.MakePreState(rules, dbTx, test.Genesis.Alloc, uint64(test.Context.Number))
 			if test.Genesis.BaseFee != nil {
 				context.BaseFee, _ = uint256.FromBig(test.Genesis.BaseFee)
 			}
@@ -227,12 +222,12 @@ func BenchmarkTracers(b *testing.B) {
 			if err := json.Unmarshal(blob, test); err != nil {
 				b.Fatalf("failed to parse testcase: %v", err)
 			}
-			benchTracer(b, "callTracer", test)
+			benchTracer("callTracer", test, b)
 		})
 	}
 }
 
-func benchTracer(b *testing.B, tracerName string, test *callTracerTest) {
+func benchTracer(tracerName string, test *callTracerTest, b *testing.B) {
 	// Configure a blockchain with the given prestate
 	tx, err := types.DecodeTransaction(rlp.NewStream(bytes.NewReader(common.FromHex(test.Input)), 0))
 	if err != nil {
@@ -258,10 +253,7 @@ func benchTracer(b *testing.B, tracerName string, test *callTracerTest) {
 		Difficulty:  (*big.Int)(test.Context.Difficulty),
 		GasLimit:    uint64(test.Context.GasLimit),
 	}
-	m := stages.Mock(b)
-	dbTx, err := m.DB.BeginRw(m.Ctx)
-	require.NoError(b, err)
-	defer dbTx.Rollback()
+	_, dbTx := memdb.NewTestTx(b)
 	statedb, _ := tests.MakePreState(rules, dbTx, test.Genesis.Alloc, uint64(test.Context.Number))
 
 	b.ReportAllocs()
@@ -323,22 +315,18 @@ func TestZeroValueToNotExitCall(t *testing.T) {
 		byte(vm.DUP1), byte(vm.PUSH1), 0xff, byte(vm.GAS), // value=0,address=0xff, gas=GAS
 		byte(vm.CALL),
 	}
-	var alloc = types.GenesisAlloc{
-		to: types.GenesisAccount{
+	var alloc = core.GenesisAlloc{
+		to: core.GenesisAccount{
 			Nonce: 1,
 			Code:  code,
 		},
-		origin: types.GenesisAccount{
+		origin: core.GenesisAccount{
 			Nonce:   0,
 			Balance: big.NewInt(500000000000000),
 		},
 	}
 	rules := params.MainnetChainConfig.Rules(context.BlockNumber, context.Time)
-	m := stages.Mock(t)
-	dbTx, err := m.DB.BeginRw(m.Ctx)
-	require.NoError(t, err)
-	defer dbTx.Rollback()
-
+	_, dbTx := memdb.NewTestTx(t)
 	statedb, _ := tests.MakePreState(rules, dbTx, alloc, context.BlockNumber)
 	// Create the tracer, the EVM environment and run it
 	tracer, err := tracers.New("callTracer", nil, nil)

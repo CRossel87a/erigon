@@ -5,7 +5,6 @@ import (
 
 	mapset "github.com/deckarep/golang-set"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/consensus/ethash/ethashcfg"
 	"github.com/ledgerwatch/log/v3"
 
 	"github.com/ledgerwatch/erigon/consensus"
@@ -23,7 +22,7 @@ type FakeEthash struct {
 // still have to conform to the Ethereum consensus rules.
 func NewFakeFailer(fail uint64) *FakeEthash {
 	return &FakeEthash{
-		Ethash:   newFakeEth(ethashcfg.ModeFake),
+		Ethash:   newFakeEth(ModeFake),
 		fakeFail: fail,
 	}
 }
@@ -33,7 +32,7 @@ func NewFakeFailer(fail uint64) *FakeEthash {
 // consensus rules.
 func NewFaker() *FakeEthash {
 	return &FakeEthash{
-		Ethash: newFakeEth(ethashcfg.ModeFake),
+		Ethash: newFakeEth(ModeFake),
 	}
 }
 
@@ -42,14 +41,14 @@ func NewFaker() *FakeEthash {
 // they still have to conform to the Ethereum consensus rules.
 func NewFakeDelayer(delay time.Duration) *FakeEthash {
 	return &FakeEthash{
-		Ethash:    newFakeEth(ethashcfg.ModeFake),
+		Ethash:    newFakeEth(ModeFake),
 		fakeDelay: delay,
 	}
 }
 
-func newFakeEth(mode ethashcfg.Mode) Ethash {
+func newFakeEth(mode Mode) Ethash {
 	return Ethash{
-		config: ethashcfg.Config{
+		config: Config{
 			PowMode: mode,
 			Log:     log.Root(),
 		},
@@ -133,8 +132,8 @@ type FullFakeEthash FakeEthash
 func NewFullFaker() *FullFakeEthash {
 	return &FullFakeEthash{
 		Ethash: Ethash{
-			config: ethashcfg.Config{
-				PowMode: ethashcfg.ModeFullFake,
+			config: Config{
+				PowMode: ModeFullFake,
 				Log:     log.Root(),
 			},
 		},

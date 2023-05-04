@@ -15,9 +15,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv/iter"
 	"github.com/ledgerwatch/erigon-lib/kv/order"
 	"github.com/ledgerwatch/erigon-lib/kv/rawdbv3"
-
 	"github.com/ledgerwatch/erigon/common/hexutil"
-	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/ethash"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -25,7 +23,6 @@ import (
 	"github.com/ledgerwatch/erigon/core/state/temporal"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
-	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/ethdb"
 	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
@@ -34,10 +31,7 @@ import (
 )
 
 // Transaction implements trace_transaction
-func (api *TraceAPIImpl) Transaction(ctx context.Context, txHash common.Hash, gasBailOut *bool) (ParityTraces, error) {
-	if gasBailOut == nil {
-		gasBailOut = new(bool) // false by default
-	}
+func (api *TraceAPIImpl) Transaction(ctx context.Context, txHash common.Hash) (ParityTraces, error) {
 	tx, err := api.kv.BeginRo(ctx)
 	if err != nil {
 		return nil, err
@@ -91,10 +85,14 @@ func (api *TraceAPIImpl) Transaction(ctx context.Context, txHash common.Hash, ga
 	}
 	bn := hexutil.Uint64(blockNumber)
 
+	parentNr := bn
+	if parentNr > 0 {
+		parentNr -= 1
+	}
 	hash := block.Hash()
 
 	// Returns an array of trace arrays, one trace array for each transaction
-	traces, err := api.callManyTransactions(ctx, tx, block, []string{TraceTypeTrace}, txIndex, *gasBailOut, types.MakeSigner(chainConfig, blockNumber), chainConfig)
+	traces, err := api.callManyTransactions(ctx, tx, block.Transactions(), []string{TraceTypeTrace}, block.ParentHash(), rpc.BlockNumber(parentNr), block.Header(), txIndex, types.MakeSigner(chainConfig, blockNumber), chainConfig.Rules(blockNumber, block.Time()))
 	if err != nil {
 		return nil, err
 	}
@@ -120,12 +118,13 @@ func (api *TraceAPIImpl) Transaction(ctx context.Context, txHash common.Hash, ga
 }
 
 // Get implements trace_get
-func (api *TraceAPIImpl) Get(ctx context.Context, txHash common.Hash, indicies []hexutil.Uint64, gasBailOut *bool) (*ParityTrace, error) {
+func (api *TraceAPIImpl) Get(ctx context.Context, txHash common.Hash, indicies []hexutil.Uint64) (*ParityTrace, error) {
 	// Parity fails if it gets more than a single index. It returns nothing in this case. Must we?
 	if len(indicies) > 1 {
 		return nil, nil
 	}
-	traces, err := api.Transaction(ctx, txHash, gasBailOut)
+
+	traces, err := api.Transaction(ctx, txHash)
 	if err != nil {
 		return nil, err
 	}
@@ -141,10 +140,7 @@ func (api *TraceAPIImpl) Get(ctx context.Context, txHash common.Hash, indicies [
 }
 
 // Block implements trace_block
-func (api *TraceAPIImpl) Block(ctx context.Context, blockNr rpc.BlockNumber, gasBailOut *bool) (ParityTraces, error) {
-	if gasBailOut == nil {
-		gasBailOut = new(bool) // false by default
-	}
+func (api *TraceAPIImpl) Block(ctx context.Context, blockNr rpc.BlockNumber) (ParityTraces, error) {
 	tx, err := api.kv.BeginRo(ctx)
 	if err != nil {
 		return nil, err
@@ -168,11 +164,16 @@ func (api *TraceAPIImpl) Block(ctx context.Context, blockNr rpc.BlockNumber, gas
 		return nil, fmt.Errorf("could not find block %d", uint64(bn))
 	}
 
+	parentNr := bn
+	if parentNr > 0 {
+		parentNr -= 1
+	}
+
 	chainConfig, err := api.chainConfig(tx)
 	if err != nil {
 		return nil, err
 	}
-	traces, err := api.callManyTransactions(ctx, tx, block, []string{TraceTypeTrace}, -1 /* all tx indices */, *gasBailOut /* gasBailOut */, types.MakeSigner(chainConfig, blockNum), chainConfig)
+	traces, err := api.callManyTransactions(ctx, tx, block.Transactions(), []string{TraceTypeTrace}, block.ParentHash(), rpc.BlockNumber(parentNr), block.Header(), -1 /* all tx indices */, types.MakeSigner(chainConfig, blockNum), chainConfig.Rules(blockNum, block.Time()))
 	if err != nil {
 		return nil, err
 	}
@@ -295,33 +296,33 @@ func traceFilterBitmapsV3(tx kv.TemporalTx, req TraceFilterRequest, from, to uin
 
 	for _, addr := range req.FromAddress {
 		if addr != nil {
-			it, err := tx.IndexRange(temporal.TracesFromIdx, addr.Bytes(), int(from), int(to), order.Asc, kv.Unlim)
+			it, err := tx.IndexRange(temporal.TracesFromIdx, addr.Bytes(), int(from), int(to), order.Asc, -1)
 			if errors.Is(err, ethdb.ErrKeyNotFound) {
 				continue
 			}
-			allBlocks = iter.Union[uint64](allBlocks, it, order.Asc, -1)
+			allBlocks = iter.Union[uint64](allBlocks, it)
 			fromAddresses[*addr] = struct{}{}
 		}
 	}
 
 	for _, addr := range req.ToAddress {
 		if addr != nil {
-			it, err := tx.IndexRange(temporal.TracesToIdx, addr.Bytes(), int(from), int(to), order.Asc, kv.Unlim)
+			it, err := tx.IndexRange(temporal.TracesToIdx, addr.Bytes(), int(from), int(to), order.Asc, -1)
 			if errors.Is(err, ethdb.ErrKeyNotFound) {
 				continue
 			}
-			blocksTo = iter.Union[uint64](blocksTo, it, order.Asc, -1)
+			blocksTo = iter.Union[uint64](blocksTo, it)
 			toAddresses[*addr] = struct{}{}
 		}
 	}
 
 	switch req.Mode {
 	case TraceFilterModeIntersection:
-		allBlocks = iter.Intersect[uint64](allBlocks, blocksTo, -1)
+		allBlocks = iter.Intersect[uint64](allBlocks, blocksTo)
 	case TraceFilterModeUnion:
 		fallthrough
 	default:
-		allBlocks = iter.Union[uint64](allBlocks, blocksTo, order.Asc, -1)
+		allBlocks = iter.Union[uint64](allBlocks, blocksTo)
 	}
 
 	// Special case - if no addresses specified, take all traces
@@ -338,10 +339,7 @@ func traceFilterBitmapsV3(tx kv.TemporalTx, req TraceFilterRequest, from, to uin
 // Filter implements trace_filter
 // NOTE: We do not store full traces - we just store index for each address
 // Pull blocks which have txs with matching address
-func (api *TraceAPIImpl) Filter(ctx context.Context, req TraceFilterRequest, stream *jsoniter.Stream, gasBailOut *bool) error {
-	if gasBailOut == nil {
-		gasBailOut = new(bool) // false by default
-	}
+func (api *TraceAPIImpl) Filter(ctx context.Context, req TraceFilterRequest, stream *jsoniter.Stream) error {
 	dbtx, err1 := api.kv.BeginRo(ctx)
 	if err1 != nil {
 		return fmt.Errorf("traceFilter cannot open tx: %w", err1)
@@ -445,7 +443,7 @@ func (api *TraceAPIImpl) Filter(ctx context.Context, req TraceFilterRequest, str
 			isPos = header.Difficulty.Cmp(common.Big0) == 0 || header.Difficulty.Cmp(chainConfig.TerminalTotalDifficulty) >= 0
 		}
 		txs := block.Transactions()
-		t, tErr := api.callManyTransactions(ctx, dbtx, block, []string{TraceTypeTrace}, -1 /* all tx indices */, *gasBailOut, types.MakeSigner(chainConfig, b), chainConfig)
+		t, tErr := api.callManyTransactions(ctx, dbtx, txs, []string{TraceTypeTrace}, block.ParentHash(), rpc.BlockNumber(block.NumberU64()-1), block.Header(), -1 /* all tx indices */, types.MakeSigner(chainConfig, b), chainConfig.Rules(b, block.Time()))
 		if tErr != nil {
 			if first {
 				first = false
@@ -457,14 +455,13 @@ func (api *TraceAPIImpl) Filter(ctx context.Context, req TraceFilterRequest, str
 			stream.WriteObjectEnd()
 			continue
 		}
-		isIntersectionMode := req.Mode == TraceFilterModeIntersection
 		includeAll := len(fromAddresses) == 0 && len(toAddresses) == 0
 		for i, trace := range t {
 			txPosition := uint64(i)
 			txHash := txs[i].Hash()
 			// Check if transaction concerns any of the addresses we wanted
 			for _, pt := range trace.Trace {
-				if includeAll || filter_trace(pt, fromAddresses, toAddresses, isIntersectionMode) {
+				if includeAll || filter_trace(pt, fromAddresses, toAddresses) {
 					nSeen++
 					pt.BlockHash = &blockHash
 					pt.BlockNumber = &blockNumber
@@ -873,9 +870,8 @@ func (api *TraceAPIImpl) filterV3(ctx context.Context, dbtx kv.TemporalTx, fromB
 			stream.WriteObjectEnd()
 			continue
 		}
-		isIntersectionMode := req.Mode == TraceFilterModeIntersection
 		for _, pt := range traceResult.Trace {
-			if includeAll || filter_trace(pt, fromAddresses, toAddresses, isIntersectionMode) {
+			if includeAll || filter_trace(pt, fromAddresses, toAddresses) {
 				nSeen++
 				pt.BlockHash = &lastBlockHash
 				pt.BlockNumber = &blockNum
@@ -909,73 +905,41 @@ func (api *TraceAPIImpl) filterV3(ctx context.Context, dbtx kv.TemporalTx, fromB
 	return stream.Flush()
 }
 
-func filter_trace(pt *ParityTrace, fromAddresses map[common.Address]struct{}, toAddresses map[common.Address]struct{}, isIntersectionMode bool) bool {
-	f, t := false, false
+func filter_trace(pt *ParityTrace, fromAddresses map[common.Address]struct{}, toAddresses map[common.Address]struct{}) bool {
 	switch action := pt.Action.(type) {
 	case *CallTraceAction:
-		_, f = fromAddresses[action.From]
-		_, t = toAddresses[action.To]
+		_, f := fromAddresses[action.From]
+		_, t := toAddresses[action.To]
+
+		if f || t {
+			return true
+		}
 	case *CreateTraceAction:
-		_, f = fromAddresses[action.From]
+		_, f := fromAddresses[action.From]
+		if f {
+			return true
+		}
 
 		if res, ok := pt.Result.(*CreateTraceResult); ok {
 			if res.Address != nil {
-				_, t = toAddresses[*res.Address]
+				if _, t := toAddresses[*res.Address]; t {
+					return true
+				}
 			}
 		}
 	case *SuicideTraceAction:
-		_, f = fromAddresses[action.Address]
-		_, t = toAddresses[action.RefundAddress]
+		_, f := fromAddresses[action.Address]
+		_, t := toAddresses[action.RefundAddress]
+		if f || t {
+			return true
+		}
 	}
 
-	if isIntersectionMode {
-		return f && t
-	} else {
-		return f || t
-	}
+	return false
 }
 
-func (api *TraceAPIImpl) callManyTransactions(
-	ctx context.Context,
-	dbtx kv.Tx,
-	block *types.Block,
-	traceTypes []string,
-	txIndex int,
-	gasBailOut bool,
-	signer *types.Signer,
-	cfg *chain.Config,
-) ([]*TraceCallResult, error) {
-	blockNumber := block.NumberU64()
-	pNo := blockNumber
-	if pNo > 0 {
-		pNo -= 1
-	}
-	parentNo := rpc.BlockNumber(pNo)
-	rules := cfg.Rules(blockNumber, block.Time())
-	header := block.Header()
-	var excessDataGas *big.Int
-	parentBlock, err := api.blockByRPCNumber(parentNo, dbtx)
-	if err != nil {
-		return nil, err
-	} else if parentBlock != nil {
-		excessDataGas = parentBlock.ExcessDataGas()
-	}
-	txs := block.Transactions()
+func (api *TraceAPIImpl) callManyTransactions(ctx context.Context, dbtx kv.Tx, txs []types.Transaction, traceTypes []string, parentHash common.Hash, parentNo rpc.BlockNumber, header *types.Header, txIndex int, signer *types.Signer, rules *chain.Rules) ([]*TraceCallResult, error) {
 	callParams := make([]TraceCallParam, 0, len(txs))
-	reader, err := rpchelper.CreateHistoryStateReader(dbtx, blockNumber, txIndex, api.historyV3(dbtx), cfg.ChainName)
-	if err != nil {
-		return nil, err
-	}
-	stateDb := state.New(reader)
-	if err != nil {
-		return nil, err
-	}
-	engine := api.engine()
-	consensusHeaderReader := stagedsync.NewChainReaderImpl(cfg, dbtx, nil)
-	err = core.InitializeBlockExecution(engine.(consensus.Engine), consensusHeaderReader, block.HeaderNoCopy(), block.Transactions(), block.Uncles(), cfg, stateDb, excessDataGas)
-	if err != nil {
-		return nil, err
-	}
 	msgs := make([]types.Message, len(txs))
 	for i, tx := range txs {
 		hash := tx.Hash()
@@ -984,30 +948,16 @@ func (api *TraceAPIImpl) callManyTransactions(
 			traceTypes: traceTypes,
 		})
 		var err error
-
-		msg, err := tx.AsMessage(*signer, header.BaseFee, rules)
-		if err != nil {
+		if msgs[i], err = tx.AsMessage(*signer, header.BaseFee, rules); err != nil {
 			return nil, fmt.Errorf("convert tx into msg: %w", err)
 		}
-
-		// gnosis might have a fee free account here
-		if msg.FeeCap().IsZero() && engine != nil {
-			syscall := func(contract common.Address, data []byte) ([]byte, error) {
-				return core.SysCallContract(contract, data, *cfg, stateDb, header, engine, true /* constCall */, excessDataGas)
-			}
-			msg.SetIsFree(engine.IsServiceTransaction(msg.From(), syscall))
-		}
-
-		msgs[i] = msg
 	}
-
-	parentHash := block.ParentHash()
 
 	traces, cmErr := api.doCallMany(ctx, dbtx, msgs, callParams, &rpc.BlockNumberOrHash{
 		BlockNumber:      &parentNo,
 		BlockHash:        &parentHash,
 		RequireCanonical: true,
-	}, header, gasBailOut /* gasBailout */, txIndex)
+	}, header, false /* gasBailout */, txIndex)
 
 	if cmErr != nil {
 		return nil, cmErr

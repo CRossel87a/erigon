@@ -3,10 +3,6 @@
         "constant": false,
         "inputs": [
             {
-                "name": "maxNumberOfFailedWithdrawalsToProcess",
-                "type": "uint256"
-            },
-            {
                 "name": "amounts",
                 "type": "uint64[]"
             },

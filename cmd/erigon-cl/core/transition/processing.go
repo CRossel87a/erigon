@@ -33,8 +33,7 @@ func ProcessBlockHeader(state *state.BeaconState, block *cltypes.BeaconBlock, fu
 		if block.ProposerIndex != propInd {
 			return fmt.Errorf("block proposer index: %d, does not match beacon proposer index: %d", block.ProposerIndex, propInd)
 		}
-		blockHeader := state.LatestBlockHeader()
-		latestRoot, err := (&blockHeader).HashSSZ()
+		latestRoot, err := state.LatestBlockHeader().HashSSZ()
 		if err != nil {
 			return fmt.Errorf("unable to hash tree root of latest block header: %v", err)
 		}
@@ -54,7 +53,7 @@ func ProcessBlockHeader(state *state.BeaconState, block *cltypes.BeaconBlock, fu
 		BodyRoot:      bodyRoot,
 	})
 
-	proposer, err := state.ValidatorForValidatorIndex(int(block.ProposerIndex))
+	proposer, err := state.ValidatorAt(int(block.ProposerIndex))
 	if err != nil {
 		return err
 	}
@@ -66,7 +65,7 @@ func ProcessBlockHeader(state *state.BeaconState, block *cltypes.BeaconBlock, fu
 
 func ProcessRandao(state *state.BeaconState, randao [96]byte, proposerIndex uint64, fullValidation bool) error {
 	epoch := state.Epoch()
-	proposer, err := state.ValidatorForValidatorIndex(int(proposerIndex))
+	proposer, err := state.ValidatorAt(int(proposerIndex))
 	if err != nil {
 		return err
 	}
@@ -94,6 +93,7 @@ func ProcessRandao(state *state.BeaconState, randao [96]byte, proposerIndex uint
 	for i := range mix {
 		mix[i] = randaoMixes[i] ^ randaoHash[i]
 	}
+
 	state.SetRandaoMixAt(int(epoch%state.BeaconConfig().EpochsPerHistoricalVector), mix)
 	return nil
 }

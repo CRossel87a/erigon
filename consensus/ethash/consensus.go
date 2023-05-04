@@ -28,7 +28,6 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/consensus/ethash/ethashcfg"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/crypto/sha3"
 
@@ -239,14 +238,6 @@ func VerifyHeaderBasics(chain consensus.ChainHeaderReader, header, parent *types
 		// Verify the header's EIP-1559 attributes.
 		return err
 	}
-	if !chain.Config().IsCancun(header.Time) {
-		if header.ExcessDataGas != nil {
-			return fmt.Errorf("invalid excessDataGas before fork: have %v, expected 'nil'", header.ExcessDataGas)
-		}
-	} else if err := misc.VerifyEip4844Header(chain.Config(), parent, header); err != nil {
-		// Verify the header's EIP-4844 attributes.
-		return err
-	}
 
 	// Verify that the block number is parent's +1
 	if diff := new(big.Int).Sub(header.Number, parent.Number); diff.Cmp(big.NewInt(1)) != 0 {
@@ -259,6 +250,9 @@ func VerifyHeaderBasics(chain consensus.ChainHeaderReader, header, parent *types
 
 	// If all checks passed, validate any special fields for hard forks
 	if err := misc.VerifyDAOHeaderExtraData(chain.Config(), header); err != nil {
+		return err
+	}
+	if err := misc.VerifyForkHashes(chain.Config(), header, uncle); err != nil {
 		return err
 	}
 	return nil
@@ -526,7 +520,7 @@ func (ethash *Ethash) verifySeal(header *types.Header, fulldag bool) error { //n
 		cache := ethash.cache(number)
 
 		size := datasetSize(number)
-		if ethash.config.PowMode == ethashcfg.ModeTest {
+		if ethash.config.PowMode == ModeTest {
 			size = 32 * 1024
 		}
 		digest, result = hashimotoLight(size, cache.cache, ethash.SealHash(header).Bytes(), header.Nonce.Uint64())
@@ -557,7 +551,7 @@ func (ethash *Ethash) Prepare(chain consensus.ChainHeaderReader, header *types.H
 	return nil
 }
 
-func (ethash *Ethash) Initialize(config *chain.Config, chain consensus.ChainHeaderReader, header *types.Header,
+func (ethash *Ethash) Initialize(config *chain.Config, chain consensus.ChainHeaderReader, e consensus.EpochReader, header *types.Header,
 	state *state.IntraBlockState, txs []types.Transaction, uncles []*types.Header, syscall consensus.SystemCall) {
 }
 
@@ -565,17 +559,10 @@ func (ethash *Ethash) Initialize(config *chain.Config, chain consensus.ChainHead
 // setting the final state on the header
 func (ethash *Ethash) Finalize(config *chain.Config, header *types.Header, state *state.IntraBlockState,
 	txs types.Transactions, uncles []*types.Header, r types.Receipts, withdrawals []*types.Withdrawal,
-	chain consensus.ChainHeaderReader, syscall consensus.SystemCall,
+	e consensus.EpochReader, chain consensus.ChainHeaderReader, syscall consensus.SystemCall,
 ) (types.Transactions, types.Receipts, error) {
 	// Accumulate any block and uncle rewards and commit the final state root
 	accumulateRewards(config, state, header, uncles)
-	if config.IsCancun(header.Time) {
-		if parent := chain.GetHeaderByHash(header.ParentHash); parent != nil {
-			header.SetExcessDataGas(misc.CalcExcessDataGas(parent.ExcessDataGas, misc.CountBlobs(txs)))
-		} else {
-			header.SetExcessDataGas(new(big.Int))
-		}
-	}
 	return txs, r, nil
 }
 
@@ -583,11 +570,11 @@ func (ethash *Ethash) Finalize(config *chain.Config, header *types.Header, state
 // uncle rewards, setting the final state and assembling the block.
 func (ethash *Ethash) FinalizeAndAssemble(chainConfig *chain.Config, header *types.Header, state *state.IntraBlockState,
 	txs types.Transactions, uncles []*types.Header, r types.Receipts, withdrawals []*types.Withdrawal,
-	chain consensus.ChainHeaderReader, syscall consensus.SystemCall, call consensus.Call,
+	e consensus.EpochReader, chain consensus.ChainHeaderReader, syscall consensus.SystemCall, call consensus.Call,
 ) (*types.Block, types.Transactions, types.Receipts, error) {
 
 	// Finalize block
-	outTxs, outR, err := ethash.Finalize(chainConfig, header, state, txs, uncles, r, withdrawals, chain, syscall)
+	outTxs, outR, err := ethash.Finalize(chainConfig, header, state, txs, uncles, r, withdrawals, e, chain, syscall)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -616,9 +603,6 @@ func (ethash *Ethash) SealHash(header *types.Header) (hash libcommon.Hash) {
 	}
 	if header.BaseFee != nil {
 		enc = append(enc, header.BaseFee)
-	}
-	if header.ExcessDataGas != nil {
-		enc = append(enc, header.ExcessDataGas)
 	}
 	rlp.Encode(hasher, enc)
 	hasher.Sum(hash[:0])

@@ -20,6 +20,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/holiman/uint256"
+	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	"github.com/ledgerwatch/erigon-lib/common/length"
@@ -30,8 +31,12 @@ import (
 	"github.com/ledgerwatch/erigon-lib/recsplit"
 	"github.com/ledgerwatch/erigon-lib/recsplit/eliasfano32"
 	librlp "github.com/ledgerwatch/erigon-lib/rlp"
-	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
+
+	"github.com/ledgerwatch/erigon/turbo/debug"
+	"github.com/ledgerwatch/erigon/turbo/logging"
+
+	"github.com/ledgerwatch/log/v3"
 
 	hackdb "github.com/ledgerwatch/erigon/cmd/hack/db"
 	"github.com/ledgerwatch/erigon/cmd/hack/flow"
@@ -50,8 +55,6 @@ import (
 	"github.com/ledgerwatch/erigon/ethdb/cbor"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rlp"
-	"github.com/ledgerwatch/erigon/turbo/debug"
-	"github.com/ledgerwatch/erigon/turbo/logging"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
 )
 
@@ -1100,8 +1103,33 @@ func devTx(chaindata string) error {
 }
 
 func chainConfig(name string) error {
-	chainConfig := params.ChainConfigByChainName(name)
-	if chainConfig == nil {
+	var chainConfig *chain.Config
+	switch name {
+	case "mainnet":
+		chainConfig = params.MainnetChainConfig
+	case "sepolia":
+		chainConfig = params.SepoliaChainConfig
+	case "rinkeby":
+		chainConfig = params.RinkebyChainConfig
+	case "goerli":
+		chainConfig = params.GoerliChainConfig
+	case "bsc":
+		chainConfig = params.BSCChainConfig
+	case "sokol":
+		chainConfig = params.SokolChainConfig
+	case "chapel":
+		chainConfig = params.ChapelChainConfig
+	case "rialto":
+		chainConfig = params.RialtoChainConfig
+	case "mumbai":
+		chainConfig = params.MumbaiChainConfig
+	case "bor-mainnet":
+		chainConfig = params.BorMainnetChainConfig
+	case "gnosis":
+		chainConfig = params.GnosisChainConfig
+	case "chiado":
+		chainConfig = params.ChiadoChainConfig
+	default:
 		return fmt.Errorf("unknown name: %s", name)
 	}
 	f, err := os.Create(filepath.Join("params", "chainspecs", fmt.Sprintf("%s.json", name)))
@@ -1375,7 +1403,7 @@ func main() {
 	debug.RaiseFdLimit()
 	flag.Parse()
 
-	logging.SetupLogger("hack")
+	_ = logging.GetLogger("hack")
 
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)

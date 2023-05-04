@@ -579,7 +579,7 @@ func NewGrpcServer(ctx context.Context, dialCandidates func() enode.Iterator, re
 					log.Trace("[p2p] peer already has connection", "peerId", printablePeerID)
 					return nil
 				}
-				log.Trace("[p2p] start with peer", "peerId", printablePeerID)
+				log.Debug("[p2p] start with peer", "peerId", printablePeerID)
 
 				peerInfo := NewPeerInfo(peer, rw)
 				peerInfo.protocol = protocol
@@ -592,11 +592,7 @@ func NewGrpcServer(ctx context.Context, dialCandidates func() enode.Iterator, re
 					return ss.startSync(ctx, bestHash, peerID)
 				})
 				if err != nil {
-					if errors.Is(err, NetworkIdMissmatchErr) || errors.Is(err, io.EOF) || errors.Is(err, p2p.ErrShuttingDown) {
-						log.Trace("[p2p] Handshake failure", "peer", printablePeerID, "err", err)
-					} else {
-						log.Debug("[p2p] Handshake failure", "peer", printablePeerID, "err", err)
-					}
+					log.Debug("[p2p] Handshake failure", "peer", printablePeerID, "err", err)
 					return fmt.Errorf("[p2p]handshake to peer %s: %w", printablePeerID, err)
 				}
 				log.Trace("[p2p] Received status message OK", "peerId", printablePeerID, "name", peer.Name())
@@ -832,7 +828,7 @@ func (ss *GrpcServer) SendMessageByMinBlock(_ context.Context, inreq *proto_sent
 	if inreq.MaxPeers == 1 {
 		peerInfo, found := ss.findPeerByMinBlock(inreq.MinBlock)
 		if found {
-			ss.writePeer("[sentry] sendMessageByMinBlock", peerInfo, msgcode, inreq.Data.Data, 30*time.Second)
+			ss.writePeer("sendMessageByMinBlock", peerInfo, msgcode, inreq.Data.Data, 30*time.Second)
 			reply.Peers = []*proto_types.H512{gointerfaces.ConvertHashToH512(peerInfo.ID())}
 			return reply, nil
 		}
@@ -840,7 +836,7 @@ func (ss *GrpcServer) SendMessageByMinBlock(_ context.Context, inreq *proto_sent
 	peerInfos := ss.findBestPeersWithPermit(int(inreq.MaxPeers))
 	reply.Peers = make([]*proto_types.H512, len(peerInfos))
 	for i, peerInfo := range peerInfos {
-		ss.writePeer("[sentry] sendMessageByMinBlock", peerInfo, msgcode, inreq.Data.Data, 15*time.Second)
+		ss.writePeer("sendMessageByMinBlock", peerInfo, msgcode, inreq.Data.Data, 15*time.Second)
 		reply.Peers[i] = gointerfaces.ConvertHashToH512(peerInfo.ID())
 	}
 	return reply, nil
@@ -868,7 +864,7 @@ func (ss *GrpcServer) SendMessageById(_ context.Context, inreq *proto_sentry.Sen
 		return reply, nil
 	}
 
-	ss.writePeer("[sentry] sendMessageById", peerInfo, msgcode, inreq.Data.Data, 0)
+	ss.writePeer("sendMessageById", peerInfo, msgcode, inreq.Data.Data, 0)
 	reply.Peers = []*proto_types.H512{inreq.PeerId}
 	return reply, nil
 }
@@ -902,7 +898,7 @@ func (ss *GrpcServer) SendMessageToRandomPeers(ctx context.Context, req *proto_s
 	var lastErr error
 	// Send the block to a subset of our peers at random
 	for _, peerInfo := range peerInfos[:peersToSendCount] {
-		ss.writePeer("[sentry] sendMessageToRandomPeers", peerInfo, msgcode, req.Data.Data, 0)
+		ss.writePeer("sendMessageToRandomPeers", peerInfo, msgcode, req.Data.Data, 0)
 		reply.Peers = append(reply.Peers, gointerfaces.ConvertHashToH512(peerInfo.ID()))
 	}
 	return reply, lastErr
@@ -920,7 +916,7 @@ func (ss *GrpcServer) SendMessageToAll(ctx context.Context, req *proto_sentry.Ou
 
 	var lastErr error
 	ss.rangePeers(func(peerInfo *PeerInfo) bool {
-		ss.writePeer("[sentry] SendMessageToAll", peerInfo, msgcode, req.Data, 0)
+		ss.writePeer("SendMessageToAll", peerInfo, msgcode, req.Data, 0)
 		reply.Peers = append(reply.Peers, gointerfaces.ConvertHashToH512(peerInfo.ID()))
 		return true
 	})

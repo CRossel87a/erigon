@@ -1,0 +1,7 @@
+make erigon
+wget https://raw.githubusercontent.com/Bitgert/brise-chain/master/brise_mainnet.json
+mkdir /root/.erigon/
+./erigon --datadir /root/.erigon/ init brise_mainnet.json
+
+# mainnet
+./erigon --datadir=/root/.erigon/ --port=30303 --http.port=18545 --authrpc.port=18551 --torrent.port=32069 --private.api.addr=127.0.0.1:7090 --http --ws --http.api=eth,debug,net,trace,web3,erigon --db.size.limit "1TB" --db.pagesize=16k

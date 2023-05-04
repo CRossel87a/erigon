@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/log/v3"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -101,10 +102,9 @@ func (s *GossipSubscription) do(ctx context.Context, sub *pubsub.Subscription, t
 		if msg.GetFrom() == s.host {
 			return
 		}
+		if err := s.topic.Publish(ctx, common.CopyBytes(msg.Data)); err != nil {
+			return
+		}
 		s.ch <- msg
 	}
-}
-
-func (g *GossipSubscription) Publish(data []byte) error {
-	return g.topic.Publish(g.ctx, data)
 }

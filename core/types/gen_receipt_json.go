@@ -8,7 +8,6 @@ import (
 	"math/big"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 
 	"github.com/ledgerwatch/erigon/common/hexutil"
 )
@@ -19,7 +18,7 @@ var _ = (*receiptMarshaling)(nil)
 func (r Receipt) MarshalJSON() ([]byte, error) {
 	type Receipt struct {
 		Type              hexutil.Uint64    `json:"type,omitempty"`
-		PostState         hexutility.Bytes  `json:"root"`
+		PostState         hexutil.Bytes     `json:"root"`
 		Status            hexutil.Uint64    `json:"status"`
 		CumulativeGasUsed hexutil.Uint64    `json:"cumulativeGasUsed" gencodec:"required"`
 		Bloom             Bloom             `json:"logsBloom"         gencodec:"required"`
@@ -51,7 +50,7 @@ func (r Receipt) MarshalJSON() ([]byte, error) {
 func (r *Receipt) UnmarshalJSON(input []byte) error {
 	type Receipt struct {
 		Type              *hexutil.Uint64    `json:"type,omitempty"`
-		PostState         *hexutility.Bytes  `json:"root"`
+		PostState         *hexutil.Bytes     `json:"root"`
 		Status            *hexutil.Uint64    `json:"status"`
 		CumulativeGasUsed *hexutil.Uint64    `json:"cumulativeGasUsed" gencodec:"required"`
 		Bloom             *Bloom             `json:"logsBloom"         gencodec:"required"`

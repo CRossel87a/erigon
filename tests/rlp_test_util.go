@@ -107,11 +107,11 @@ func translateJSON(v interface{}) interface{} {
 		}
 		return []byte(v)
 	case []interface{}:
-		newJson := make([]interface{}, len(v))
+		new := make([]interface{}, len(v))
 		for i := range v {
-			newJson[i] = translateJSON(v[i])
+			new[i] = translateJSON(v[i])
 		}
-		return newJson
+		return new
 	default:
 		panic(fmt.Errorf("can't handle %T", v))
 	}

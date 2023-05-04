@@ -34,7 +34,7 @@ func SpawnStageCumulativeIndex(cfg CumulativeIndexCfg, s *StageState, tx kv.RwTx
 
 	if !useExternalTx {
 		var err error
-		tx, err = cfg.db.BeginRw(ctx)
+		tx, err = cfg.db.BeginRw(context.Background())
 		if err != nil {
 			return err
 		}
@@ -102,8 +102,6 @@ func SpawnStageCumulativeIndex(cfg CumulativeIndexCfg, s *StageState, tx kv.RwTx
 
 		// Check for logs
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
 		case <-logEvery.C:
 			log.Info(fmt.Sprintf("[%s] Wrote Cumulative Index", s.LogPrefix()),
 				"gasUsed", cumulativeGasUsed.String(), "now", currentBlockNumber, "blk/sec", float64(currentBlockNumber-prevProgress)/float64(logInterval/time.Second))

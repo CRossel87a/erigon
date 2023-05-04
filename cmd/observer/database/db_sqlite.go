@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ledgerwatch/erigon/cmd/utils"
 	_ "modernc.org/sqlite"
 )
 
@@ -709,7 +708,7 @@ func (db *DBSQLite) FindNeighborBucketKeys(ctx context.Context, id NodeID) ([]st
 	if !keysStr.Valid {
 		return nil, nil
 	}
-	return utils.SplitAndTrim(keysStr.String), nil
+	return strings.Split(keysStr.String, ","), nil
 }
 
 func (db *DBSQLite) UpdateSentryCandidatesLastEventTime(ctx context.Context, value time.Time) error {

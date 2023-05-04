@@ -17,8 +17,8 @@ func main() {
 	rootCtx, rootCancel := common.RootContext()
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
-		logging.SetupLoggerCmd("rpcdaemon", cmd)
-		db, borDb, backend, txPool, mining, stateCache, blockReader, ff, agg, err := cli.RemoteServices(ctx, *cfg, log.Root(), rootCancel)
+		logger := logging.GetLoggerCmd("rpcdaemon", cmd)
+		db, borDb, backend, txPool, mining, stateCache, blockReader, ff, agg, err := cli.RemoteServices(ctx, *cfg, logger, rootCancel)
 		if err != nil {
 			log.Error("Could not connect to DB", "err", err)
 			return nil

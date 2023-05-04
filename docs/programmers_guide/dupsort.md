@@ -153,8 +153,7 @@ Erigon
 This article target is to show tricky concepts on examples. Future
 reading [here](./db_walkthrough.MD#table-history-of-accounts)
 
-Erigon supports multiple typed cursors, see the [KV
-Readme.md](https://github.com/ledgerwatch/erigon-lib/tree/main/kv)
+Erigon supports multiple typed cursors, see [AbstractKV.md](./../../ethdb/AbstractKV.md)
 
 
 

@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/holiman/uint256"
-	"github.com/ledgerwatch/erigon-lib/common"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/gointerfaces"
 	"github.com/ledgerwatch/erigon-lib/gointerfaces/execution"
@@ -109,6 +108,7 @@ func (e *Eth1Execution) UpdateForkChoice(ctx context.Context, hash *types2.H256)
 func (e *Eth1Execution) GetHeader(ctx context.Context, req *execution.GetSegmentRequest) (*execution.GetHeaderResponse, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
 	tx, err := e.db.BeginRo(ctx)
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func (e *Eth1Execution) GetHeader(ctx context.Context, req *execution.GetSegment
 	}
 	// Got nothing? return nothing :)
 	if header == nil {
-		return &execution.GetHeaderResponse{}, nil
+		return nil, nil
 	}
 
 	return &execution.GetHeaderResponse{
@@ -210,40 +210,35 @@ func (e *Eth1Execution) GetHeaderHashNumber(ctx context.Context, req *types2.H25
 func HeaderRpcToHeader(header *execution.Header) (*types.Header, error) {
 	var blockNonce types.BlockNonce
 	binary.BigEndian.PutUint64(blockNonce[:], header.Nonce)
-	var baseFee *big.Int
-	var withdrawalHash *common.Hash
+	h := &types.Header{
+		ParentHash:  gointerfaces.ConvertH256ToHash(header.ParentHash),
+		UncleHash:   gointerfaces.ConvertH256ToHash(header.OmmerHash),
+		Coinbase:    gointerfaces.ConvertH160toAddress(header.Coinbase),
+		Root:        gointerfaces.ConvertH256ToHash(header.StateRoot),
+		TxHash:      gointerfaces.ConvertH256ToHash(header.TransactionHash),
+		ReceiptHash: gointerfaces.ConvertH256ToHash(header.ReceiptRoot),
+		Bloom:       gointerfaces.ConvertH2048ToBloom(header.LogsBloom),
+		Difficulty:  gointerfaces.ConvertH256ToUint256Int(header.Difficulty).ToBig(),
+		Number:      big.NewInt(int64(header.BlockNumber)),
+		GasLimit:    header.GasLimit,
+		GasUsed:     header.GasUsed,
+		Time:        header.Timestamp,
+		Extra:       header.ExtraData,
+		MixDigest:   gointerfaces.ConvertH256ToHash(header.MixDigest),
+		Nonce:       blockNonce,
+	}
 	if header.BaseFeePerGas != nil {
-		baseFee = gointerfaces.ConvertH256ToUint256Int(header.BaseFeePerGas).ToBig()
+		h.BaseFee = gointerfaces.ConvertH256ToUint256Int(header.BaseFeePerGas).ToBig()
 	}
 	if header.WithdrawalHash != nil {
-		withdrawalHash = new(libcommon.Hash)
-		*withdrawalHash = gointerfaces.ConvertH256ToHash(header.WithdrawalHash)
+		h.WithdrawalsHash = new(libcommon.Hash)
+		*h.WithdrawalsHash = gointerfaces.ConvertH256ToHash(header.WithdrawalHash)
 	}
-	h := &types.Header{
-		ParentHash:      gointerfaces.ConvertH256ToHash(header.ParentHash),
-		UncleHash:       gointerfaces.ConvertH256ToHash(header.OmmerHash),
-		Coinbase:        gointerfaces.ConvertH160toAddress(header.Coinbase),
-		Root:            gointerfaces.ConvertH256ToHash(header.StateRoot),
-		TxHash:          gointerfaces.ConvertH256ToHash(header.TransactionHash),
-		ReceiptHash:     gointerfaces.ConvertH256ToHash(header.ReceiptRoot),
-		Bloom:           gointerfaces.ConvertH2048ToBloom(header.LogsBloom),
-		Difficulty:      gointerfaces.ConvertH256ToUint256Int(header.Difficulty).ToBig(),
-		Number:          big.NewInt(int64(header.BlockNumber)),
-		GasLimit:        header.GasLimit,
-		GasUsed:         header.GasUsed,
-		Time:            header.Timestamp,
-		Extra:           header.ExtraData,
-		MixDigest:       gointerfaces.ConvertH256ToHash(header.MixDigest),
-		Nonce:           blockNonce,
-		BaseFee:         baseFee,
-		WithdrawalsHash: withdrawalHash,
-	}
-
 	blockHash := gointerfaces.ConvertH256ToHash(header.BlockHash)
 	if blockHash != h.Hash() {
 		return nil, fmt.Errorf("block %d, %x has invalid hash. expected: %x", header.BlockNumber, h.Hash(), blockHash)
 	}
-	return types.CopyHeader(h), nil
+	return h, nil
 }
 
 func HeaderToHeaderRPC(header *types.Header) *execution.Header {

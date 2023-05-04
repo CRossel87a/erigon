@@ -28,6 +28,7 @@ import (
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/node/nodecfg"
 	"github.com/ledgerwatch/erigon/p2p"
+	"github.com/ledgerwatch/log/v3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -145,7 +146,7 @@ func TestNodeCloseClosesDB(t *testing.T) {
 	stack, _ := New(testNodeConfig(t))
 	defer stack.Close()
 
-	db, err := OpenDatabase(stack.Config(), kv.SentryDB)
+	db, err := OpenDatabase(stack.Config(), log.New(), kv.SentryDB)
 	if err != nil {
 		t.Fatal("can't open DB:", err)
 	}
@@ -176,7 +177,7 @@ func TestNodeOpenDatabaseFromLifecycleStart(t *testing.T) {
 	var db kv.RwDB
 	stack.RegisterLifecycle(&InstrumentedService{
 		startHook: func() {
-			db, err = OpenDatabase(stack.Config(), kv.SentryDB)
+			db, err = OpenDatabase(stack.Config(), log.New(), kv.SentryDB)
 			if err != nil {
 				t.Fatal("can't open DB:", err)
 			}
@@ -201,7 +202,7 @@ func TestNodeOpenDatabaseFromLifecycleStop(t *testing.T) {
 
 	stack.RegisterLifecycle(&InstrumentedService{
 		stopHook: func() {
-			db, err := OpenDatabase(stack.Config(), kv.ChainDB)
+			db, err := OpenDatabase(stack.Config(), log.New(), kv.ChainDB)
 			if err != nil {
 				t.Fatal("can't open DB:", err)
 			}

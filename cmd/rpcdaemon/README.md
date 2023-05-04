@@ -243,7 +243,6 @@ The following table shows the current implementation status of Erigon's RPC daem
 | eth_newFilter                              | Yes     | Added by PR#4253                     |
 | eth_newBlockFilter                         | Yes     |                                      |
 | eth_newPendingTransactionFilter            | Yes     |                                      |
-| eth_getFilterLogs                          | Yes     | Added by PR#6514                     |
 | eth_getFilterChanges                       | Yes     |                                      |
 | eth_uninstallFilter                        | Yes     |                                      |
 | eth_getLogs                                | Yes     |                                      |
@@ -255,7 +254,7 @@ The following table shows the current implementation status of Erigon's RPC daem
 | eth_signTransaction                        | -       | not yet implemented                  |
 | eth_signTypedData                          | -       | ????                                 |
 |                                            |         |                                      |
-| eth_getProof                               | Yes     | Limited to last 1000 blocks          |
+| eth_getProof                               | -       | not yet implemented                  |
 |                                            |         |                                      |
 | eth_mining                                 | Yes     | returns true if --mine flag provided |
 | eth_coinbase                               | Yes     |                                      |

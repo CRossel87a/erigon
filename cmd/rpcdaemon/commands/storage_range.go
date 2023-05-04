@@ -51,10 +51,7 @@ func storageRangeAt(stateReader walker, contractAddress libcommon.Address, start
 func storageRangeAtV3(ttx kv.TemporalTx, contractAddress libcommon.Address, start []byte, txNum uint64, maxResult int) (StorageRangeResult, error) {
 	result := StorageRangeResult{Storage: storageMap{}}
 
-	fromKey := append(libcommon.Copy(contractAddress.Bytes()), start...)
-	toKey, _ := kv.NextSubtree(contractAddress.Bytes())
-
-	r, err := ttx.DomainRange(temporal.StorageDomain, fromKey, toKey, txNum, order.Asc, maxResult+1)
+	r, err := ttx.DomainRange(temporal.StorageDomain, contractAddress.Bytes(), start, txNum, order.Asc, maxResult+1)
 	if err != nil {
 		return StorageRangeResult{}, err
 	}

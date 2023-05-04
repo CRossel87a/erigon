@@ -10,6 +10,16 @@ import (
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 )
 
+func bytesToUint64(buf []byte) (x uint64) {
+	for i, b := range buf {
+		x = x<<8 + uint64(b)
+		if i == 7 {
+			return
+		}
+	}
+	return
+}
+
 // HistoryReaderV4 Implements StateReader and StateWriter
 type HistoryReaderV4 struct {
 	ac    *libstate.AggregatorContext
@@ -19,7 +29,7 @@ type HistoryReaderV4 struct {
 	tx    kv.Tx
 }
 
-func NewHistoryReaderV4(ac *libstate.AggregatorContext, ri *libstate.ReadIndices) *HistoryReaderV4 {
+func NewHistoryReader23(ac *libstate.AggregatorContext, ri *libstate.ReadIndices) *HistoryReaderV4 {
 	return &HistoryReaderV4{ac: ac, ri: ri}
 }
 
@@ -45,49 +55,47 @@ func (hr *HistoryReaderV4) SetTrace(trace bool) {
 }
 
 func (hr *HistoryReaderV4) ReadAccountData(address libcommon.Address) (*accounts.Account, error) {
-	addrBytes := address.Bytes()
 	if hr.ri != nil {
-		if err := hr.ri.ReadAccountData(addrBytes); err != nil {
+		if err := hr.ri.ReadAccountData(address.Bytes()); err != nil {
 			return nil, err
 		}
 	}
-	enc, err := hr.ac.ReadAccountDataBeforeTxNum(addrBytes, hr.txNum, hr.tx /* roTx */)
+	enc, err := hr.ac.ReadAccountDataBeforeTxNum(address.Bytes(), hr.txNum, hr.tx /* roTx */)
 	if err != nil {
 		return nil, err
 	}
 	if len(enc) == 0 {
 		if hr.trace {
-			fmt.Printf("ReadAccountData [%x] => []\n", addrBytes)
+			fmt.Printf("ReadAccountData [%x] => []\n", address)
 		}
 		return nil, nil
 	}
 	var a accounts.Account
 	if err := accounts.DeserialiseV3(&a, enc); err != nil {
-		return nil, fmt.Errorf("ReadAccountData(%x): %w", addrBytes, err)
+		return nil, fmt.Errorf("ReadAccountData(%x): %w", address, err)
 	}
 
 	if hr.trace {
-		fmt.Printf("ReadAccountData [%x] => [nonce: %d, balance: %d, codeHash: %x]\n", addrBytes, a.Nonce, &a.Balance, a.CodeHash)
+		fmt.Printf("ReadAccountData [%x] => [nonce: %d, balance: %d, codeHash: %x]\n", address, a.Nonce, &a.Balance, a.CodeHash)
 	}
 	return &a, nil
 }
 
 func (hr *HistoryReaderV4) ReadAccountStorage(address libcommon.Address, incarnation uint64, key *libcommon.Hash) ([]byte, error) {
-	addrBytes, keyBytes := address.Bytes(), key.Bytes()
 	if hr.ri != nil {
-		if err := hr.ri.ReadAccountStorage(addrBytes, keyBytes); err != nil {
+		if err := hr.ri.ReadAccountStorage(address.Bytes(), key.Bytes()); err != nil {
 			return nil, err
 		}
 	}
-	enc, err := hr.ac.ReadAccountStorageBeforeTxNum(addrBytes, keyBytes, hr.txNum, hr.tx /* roTx */)
+	enc, err := hr.ac.ReadAccountStorageBeforeTxNum(address.Bytes(), key.Bytes(), hr.txNum, hr.tx /* roTx */)
 	if err != nil {
 		return nil, err
 	}
 	if hr.trace {
 		if enc == nil {
-			fmt.Printf("ReadAccountStorage [%x] [%x] => []\n", addrBytes, keyBytes)
+			fmt.Printf("ReadAccountStorage [%x] [%x] => []\n", address, key.Bytes())
 		} else {
-			fmt.Printf("ReadAccountStorage [%x] [%x] => [%x]\n", addrBytes, keyBytes, enc)
+			fmt.Printf("ReadAccountStorage [%x] [%x] => [%x]\n", address, key.Bytes(), enc)
 		}
 	}
 	if enc == nil {
@@ -97,35 +105,33 @@ func (hr *HistoryReaderV4) ReadAccountStorage(address libcommon.Address, incarna
 }
 
 func (hr *HistoryReaderV4) ReadAccountCode(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) ([]byte, error) {
-	addrBytes := address.Bytes()
 	if hr.ri != nil {
-		if err := hr.ri.ReadAccountCode(addrBytes); err != nil {
+		if err := hr.ri.ReadAccountCode(address.Bytes()); err != nil {
 			return nil, err
 		}
 	}
-	enc, err := hr.ac.ReadAccountCodeBeforeTxNum(addrBytes, hr.txNum, nil /* roTx */)
+	enc, err := hr.ac.ReadAccountCodeBeforeTxNum(address.Bytes(), hr.txNum, nil /* roTx */)
 	if err != nil {
 		return nil, err
 	}
 	if hr.trace {
-		fmt.Printf("ReadAccountCode [%x] => [%x]\n", addrBytes, enc)
+		fmt.Printf("ReadAccountCode [%x] => [%x]\n", address, enc)
 	}
 	return enc, nil
 }
 
 func (hr *HistoryReaderV4) ReadAccountCodeSize(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) (int, error) {
-	addrBytes := address.Bytes()
 	if hr.ri != nil {
-		if err := hr.ri.ReadAccountCodeSize(addrBytes); err != nil {
+		if err := hr.ri.ReadAccountCodeSize(address.Bytes()); err != nil {
 			return 0, err
 		}
 	}
-	size, err := hr.ac.ReadAccountCodeSizeBeforeTxNum(addrBytes, hr.txNum, nil /* roTx */)
+	size, err := hr.ac.ReadAccountCodeSizeBeforeTxNum(address.Bytes(), hr.txNum, nil /* roTx */)
 	if err != nil {
 		return 0, err
 	}
 	if hr.trace {
-		fmt.Printf("ReadAccountCodeSize [%x] => [%d]\n", addrBytes, size)
+		fmt.Printf("ReadAccountCodeSize [%x] => [%d]\n", address, size)
 	}
 	return size, nil
 }

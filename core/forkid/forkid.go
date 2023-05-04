@@ -243,11 +243,6 @@ func GatherForks(config *chain.Config) (heightForks []uint64, timeForks []uint64
 			}
 		}
 	}
-
-	if config.Aura != nil && config.Aura.PosdaoTransition != nil {
-		heightForks = append(heightForks, *config.Aura.PosdaoTransition)
-	}
-
 	// Sort the fork block numbers & times to permit chronological XOR
 	slices.Sort(heightForks)
 	slices.Sort(timeForks)

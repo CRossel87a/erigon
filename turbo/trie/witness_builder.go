@@ -187,7 +187,7 @@ func (b *WitnessBuilder) makeBlockWitness(
 		if limiter != nil {
 			retainDec = limiter.RetainDecider
 		}
-		var codeSize int
+		codeSize := 0
 		var err error
 		if codeSize, err = b.processAccountCode(n, retainDec); err != nil {
 			return err

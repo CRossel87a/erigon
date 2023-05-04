@@ -44,32 +44,6 @@ func (s *SentinelServer) BanPeer(_ context.Context, p *sentinelrpc.Peer) (*senti
 	return &sentinelrpc.EmptyMessage{}, nil
 }
 
-func (s *SentinelServer) PublishGossip(_ context.Context, msg *sentinelrpc.GossipData) (*sentinelrpc.EmptyMessage, error) {
-	manager := s.sentinel.GossipManager()
-	// Snappify payload before sending it to gossip
-	compressedData := utils.CompressSnappy(msg.Data)
-	var subscription *sentinel.GossipSubscription
-
-	switch msg.Type {
-	case sentinelrpc.GossipType_BeaconBlockGossipType:
-		subscription = manager.GetMatchingSubscription(string(sentinel.BeaconBlockTopic))
-	case sentinelrpc.GossipType_AggregateAndProofGossipType:
-		subscription = manager.GetMatchingSubscription(string(sentinel.BeaconAggregateAndProofTopic))
-	case sentinelrpc.GossipType_VoluntaryExitGossipType:
-		subscription = manager.GetMatchingSubscription(string(sentinel.VoluntaryExitTopic))
-	case sentinelrpc.GossipType_ProposerSlashingGossipType:
-		subscription = manager.GetMatchingSubscription(string(sentinel.ProposerSlashingTopic))
-	case sentinelrpc.GossipType_AttesterSlashingGossipType:
-		subscription = manager.GetMatchingSubscription(string(sentinel.AttesterSlashingTopic))
-	default:
-		return &sentinelrpc.EmptyMessage{}, nil
-	}
-	if subscription == nil {
-		return &sentinelrpc.EmptyMessage{}, nil
-	}
-	return &sentinelrpc.EmptyMessage{}, subscription.Publish(compressedData)
-}
-
 func (s *SentinelServer) SubscribeGossip(_ *sentinelrpc.EmptyMessage, stream sentinelrpc.Sentinel_SubscribeGossipServer) error {
 	// first of all subscribe
 	ch, subId, err := s.gossipNotifier.addSubscriber()
@@ -98,9 +72,7 @@ func (s *SentinelServer) SubscribeGossip(_ *sentinelrpc.EmptyMessage, stream sen
 }
 
 func (s *SentinelServer) SendRequest(_ context.Context, req *sentinelrpc.RequestData) (*sentinelrpc.ResponseData, error) {
-	retryReqInterval := time.NewTicker(200 * time.Millisecond)
-	defer retryReqInterval.Stop()
-	timeout := time.NewTimer(1 * time.Second)
+	retryReqInterval := time.NewTicker(20 * time.Millisecond)
 	defer retryReqInterval.Stop()
 	doneCh := make(chan *sentinelrpc.ResponseData)
 	// Try finding the data to our peers
@@ -136,11 +108,6 @@ func (s *SentinelServer) SendRequest(_ context.Context, req *sentinelrpc.Request
 			}()
 		case resp := <-doneCh:
 			return resp, nil
-		case <-timeout.C:
-			return &sentinelrpc.ResponseData{
-				Data:  []byte("sentinel timeout"),
-				Error: true,
-			}, nil
 		}
 	}
 }
@@ -158,11 +125,9 @@ func (s *SentinelServer) SetStatus(_ context.Context, req *sentinelrpc.Status) (
 }
 
 func (s *SentinelServer) GetPeers(_ context.Context, _ *sentinelrpc.EmptyMessage) (*sentinelrpc.PeerCount, error) {
-	nPeers, gPeers := s.sentinel.GetPeersCount()
-	log.Debug("Gossip", "peers", gPeers)
 	// Send the request and get the data if we get an answer.
 	return &sentinelrpc.PeerCount{
-		Amount: uint64(nPeers),
+		Amount: uint64(s.sentinel.GetPeersCount()),
 	}, nil
 }
 

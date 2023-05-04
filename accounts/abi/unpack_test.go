@@ -327,8 +327,8 @@ func TestMethodMultiReturn(t *testing.T) {
 		Int    *big.Int
 	}
 
-	newInterfaceSlice := func(l int) interface{} {
-		slice := make([]interface{}, l)
+	newInterfaceSlice := func(len int) interface{} {
+		slice := make([]interface{}, len)
 		return &slice
 	}
 

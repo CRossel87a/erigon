@@ -5,14 +5,15 @@ import (
 	"time"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/hexutility"
+
+	"github.com/ledgerwatch/erigon/common/hexutil"
 )
 
 // EventRecord represents state record
 type EventRecord struct {
 	ID       uint64            `json:"id" yaml:"id"`
 	Contract libcommon.Address `json:"contract" yaml:"contract"`
-	Data     hexutility.Bytes  `json:"data" yaml:"data"`
+	Data     hexutil.Bytes     `json:"data" yaml:"data"`
 	TxHash   libcommon.Hash    `json:"tx_hash" yaml:"tx_hash"`
 	LogIndex uint64            `json:"log_index" yaml:"log_index"`
 	ChainID  string            `json:"bor_chain_id" yaml:"bor_chain_id"`

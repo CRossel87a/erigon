@@ -16,7 +16,6 @@ import (
 	"github.com/ledgerwatch/erigon/cl/cltypes"
 	"github.com/ledgerwatch/erigon/cmd/erigon-el/eth1"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/ethdb/privateapi"
 )
 
 // ExecutionClient interfaces with the Erigon-EL component consensus side.
@@ -76,7 +75,6 @@ func (ec *ExecutionClient) InsertBodies(bodies []*types.RawBody, blockHashes []l
 			BlockHash:    gointerfaces.ConvertHashToH256(blockHashes[i]),
 			BlockNumber:  blockNumbers[i],
 			Transactions: body.Transactions,
-			Withdrawals:  privateapi.ConvertWithdrawalsToRpc(body.Withdrawals),
 		})
 	}
 	_, err := ec.client.InsertBodies(ec.ctx, &execution.InsertBodiesRequest{Bodies: grpcBodies})
@@ -91,14 +89,10 @@ func (ec *ExecutionClient) InsertExecutionPayloads(payloads []*cltypes.Eth1Block
 	blockNumbers := make([]uint64, 0, len(payloads))
 
 	for _, payload := range payloads {
-		rlpHeader, err := payload.RlpHeader()
-		if err != nil {
-			return err
-		}
-		headers = append(headers, rlpHeader)
-		bodies = append(bodies, payload.Body())
-		blockHashes = append(blockHashes, payload.BlockHash)
-		blockNumbers = append(blockNumbers, payload.BlockNumber)
+		headers = append(headers, payload.Header)
+		bodies = append(bodies, payload.Body)
+		blockHashes = append(blockHashes, payload.Header.BlockHashCL)
+		blockNumbers = append(blockNumbers, payload.NumberU64())
 	}
 
 	if err := ec.InsertHeaders(headers); err != nil {
@@ -140,7 +134,10 @@ func (ec *ExecutionClient) ReadExecutionPayload(number uint64, blockHash libcomm
 	if err != nil {
 		return nil, err
 	}
-	return cltypes.NewEth1BlockFromHeaderAndBody(header, body), nil
+	return &cltypes.Eth1Block{
+		Header: header,
+		Body:   body,
+	}, nil
 }
 
 func (ec *ExecutionClient) ReadBody(number uint64, blockHash libcommon.Hash) (*types.RawBody, error) {
@@ -159,9 +156,19 @@ func (ec *ExecutionClient) ReadBody(number uint64, blockHash libcommon.Hash) (*t
 		}
 		uncles = append(uncles, h)
 	}
+	// Withdrawals processing
+	withdrawals := make([]*types.Withdrawal, 0, len(resp.Body.Withdrawals))
+	for _, withdrawal := range resp.Body.Withdrawals {
+		withdrawals = append(withdrawals, &types.Withdrawal{
+			Index:     withdrawal.Index,
+			Validator: withdrawal.ValidatorIndex,
+			Address:   gointerfaces.ConvertH160toAddress(withdrawal.Address),
+			Amount:    withdrawal.Amount,
+		})
+	}
 	return &types.RawBody{
 		Transactions: resp.Body.Transactions,
 		Uncles:       uncles,
-		Withdrawals:  privateapi.ConvertWithdrawalsFromRpc(resp.Body.Withdrawals),
+		Withdrawals:  withdrawals,
 	}, nil
 }

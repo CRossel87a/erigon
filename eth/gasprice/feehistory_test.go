@@ -23,7 +23,6 @@ import (
 
 	"github.com/ledgerwatch/erigon/cmd/rpcdaemon/commands"
 	"github.com/ledgerwatch/erigon/eth/gasprice"
-	"github.com/ledgerwatch/erigon/eth/gasprice/gaspricecfg"
 	"github.com/ledgerwatch/erigon/rpc"
 )
 
@@ -54,7 +53,7 @@ func TestFeeHistory(t *testing.T) {
 		//{true, 0, 0, 2, rpc.PendingBlockNumber, []float64{0, 10}, 32, 2, nil},
 	}
 	for i, c := range cases {
-		config := gaspricecfg.Config{
+		config := gasprice.Config{
 			MaxHeaderHistory: c.maxHeader,
 			MaxBlockHistory:  c.maxBlock,
 		}

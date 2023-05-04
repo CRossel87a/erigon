@@ -52,13 +52,15 @@ func importChain(ctx *cli.Context) error {
 		utils.Fatalf("This command requires an argument.")
 	}
 
+	logger := log.New(ctx)
+
 	nodeCfg := turboNode.NewNodConfigUrfave(ctx)
 	ethCfg := turboNode.NewEthConfigUrfave(ctx, nodeCfg)
 
 	stack := makeConfigNode(nodeCfg)
 	defer stack.Close()
 
-	ethereum, err := eth.New(stack, ethCfg)
+	ethereum, err := eth.New(stack, ethCfg, logger)
 	if err != nil {
 		return err
 	}

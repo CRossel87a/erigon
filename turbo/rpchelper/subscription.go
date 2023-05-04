@@ -18,6 +18,8 @@ type chan_sub[T any] struct {
 
 	ctx context.Context
 	cn  context.CancelFunc
+
+	c sync.Cond
 }
 
 // buffered channel

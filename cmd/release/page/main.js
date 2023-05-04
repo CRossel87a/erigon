@@ -1,6 +1,4 @@
-const cacheBuster = Math.floor(new Date().getTime() / (1000 * 60 * 5));
-
-fetch("./data.json?cacheBuster=" + cacheBuster)
+fetch("./data.json")
   .then((response) => response.json())
   .then((data) => {
     const osList = ["linux", "darwin", "windows", "docker"];

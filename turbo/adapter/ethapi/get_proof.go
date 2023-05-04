@@ -230,3 +230,7 @@ func (r *Receiver) Receive(
 	// We ran out of modifications, simply pass through
 	return r.defaultReceiver.Receive(itemType, accountKey, storageKey, accountValue, storageValue, hash, hasTree, cutoff)
 }
+
+func (r *Receiver) Result() trie.SubTries {
+	return r.defaultReceiver.Result()
+}

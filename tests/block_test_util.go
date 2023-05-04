@@ -27,10 +27,8 @@ import (
 	"testing"
 
 	"github.com/holiman/uint256"
-
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	"github.com/ledgerwatch/erigon-lib/kv"
 
 	"github.com/ledgerwatch/erigon/common"
@@ -53,15 +51,15 @@ type BlockTest struct {
 }
 
 // UnmarshalJSON implements json.Unmarshaler interface.
-func (bt *BlockTest) UnmarshalJSON(in []byte) error {
-	return json.Unmarshal(in, &bt.json)
+func (t *BlockTest) UnmarshalJSON(in []byte) error {
+	return json.Unmarshal(in, &t.json)
 }
 
 type btJSON struct {
 	Blocks     []btBlock             `json:"blocks"`
 	Genesis    btHeader              `json:"genesisBlockHeader"`
-	Pre        types.GenesisAlloc    `json:"pre"`
-	Post       types.GenesisAlloc    `json:"postState"`
+	Pre        core.GenesisAlloc     `json:"pre"`
+	Post       core.GenesisAlloc     `json:"postState"`
 	BestBlock  common.UnprefixedHash `json:"lastblockhash"`
 	Network    string                `json:"network"`
 	SealEngine string                `json:"sealEngine"`
@@ -97,7 +95,7 @@ type btHeader struct {
 }
 
 type btHeaderMarshaling struct {
-	ExtraData  hexutility.Bytes
+	ExtraData  hexutil.Bytes
 	Number     *math.HexOrDecimal256
 	Difficulty *math.HexOrDecimal256
 	GasLimit   math.HexOrDecimal64
@@ -106,13 +104,13 @@ type btHeaderMarshaling struct {
 	BaseFee    *math.HexOrDecimal256
 }
 
-func (bt *BlockTest) Run(t *testing.T, _ bool) error {
-	config, ok := Forks[bt.json.Network]
+func (t *BlockTest) Run(tst *testing.T, _ bool) error {
+	config, ok := Forks[t.json.Network]
 	if !ok {
-		return UnsupportedForkError{bt.json.Network}
+		return UnsupportedForkError{t.json.Network}
 	}
 	var engine consensus.Engine
-	if bt.json.SealEngine == "NoProof" {
+	if t.json.SealEngine == "NoProof" {
 		engine = ethash.NewFaker()
 	} else {
 		engine = ethash.NewShared()
@@ -120,17 +118,17 @@ func (bt *BlockTest) Run(t *testing.T, _ bool) error {
 	if config.TerminalTotalDifficulty != nil {
 		engine = serenity.New(engine) // the Merge
 	}
-	m := stages.MockWithGenesisEngine(t, bt.genesis(config), engine, false)
+	m := stages.MockWithGenesisEngine(tst, t.genesis(config), engine, false)
 
 	// import pre accounts & construct test genesis block & state root
-	if m.Genesis.Hash() != bt.json.Genesis.Hash {
-		return fmt.Errorf("genesis block hash doesn't match test: computed=%x, test=%x", m.Genesis.Hash().Bytes()[:6], bt.json.Genesis.Hash[:6])
+	if m.Genesis.Hash() != t.json.Genesis.Hash {
+		return fmt.Errorf("genesis block hash doesn't match test: computed=%x, test=%x", m.Genesis.Hash().Bytes()[:6], t.json.Genesis.Hash[:6])
 	}
-	if m.Genesis.Root() != bt.json.Genesis.StateRoot {
-		return fmt.Errorf("genesis block state root does not match test: computed=%x, test=%x", m.Genesis.Root().Bytes()[:6], bt.json.Genesis.StateRoot[:6])
+	if m.Genesis.Root() != t.json.Genesis.StateRoot {
+		return fmt.Errorf("genesis block state root does not match test: computed=%x, test=%x", m.Genesis.Root().Bytes()[:6], t.json.Genesis.StateRoot[:6])
 	}
 
-	validBlocks, err := bt.insertBlocks(m)
+	validBlocks, err := t.insertBlocks(m)
 	if err != nil {
 		return err
 	}
@@ -141,30 +139,30 @@ func (bt *BlockTest) Run(t *testing.T, _ bool) error {
 	}
 	defer tx.Rollback()
 	cmlast := rawdb.ReadHeadBlockHash(tx)
-	if libcommon.Hash(bt.json.BestBlock) != cmlast {
-		return fmt.Errorf("last block hash validation mismatch: want: %x, have: %x", bt.json.BestBlock, cmlast)
+	if libcommon.Hash(t.json.BestBlock) != cmlast {
+		return fmt.Errorf("last block hash validation mismatch: want: %x, have: %x", t.json.BestBlock, cmlast)
 	}
 	newDB := state.New(state.NewPlainStateReader(tx))
-	if err = bt.validatePostState(newDB); err != nil {
+	if err = t.validatePostState(newDB); err != nil {
 		return fmt.Errorf("post state validation failed: %w", err)
 	}
-	return bt.validateImportedHeaders(tx, validBlocks)
+	return t.validateImportedHeaders(tx, validBlocks)
 }
 
-func (bt *BlockTest) genesis(config *chain.Config) *types.Genesis {
-	return &types.Genesis{
+func (t *BlockTest) genesis(config *chain.Config) *core.Genesis {
+	return &core.Genesis{
 		Config:     config,
-		Nonce:      bt.json.Genesis.Nonce.Uint64(),
-		Timestamp:  bt.json.Genesis.Timestamp,
-		ParentHash: bt.json.Genesis.ParentHash,
-		ExtraData:  bt.json.Genesis.ExtraData,
-		GasLimit:   bt.json.Genesis.GasLimit,
-		GasUsed:    bt.json.Genesis.GasUsed,
-		Difficulty: bt.json.Genesis.Difficulty,
-		Mixhash:    bt.json.Genesis.MixHash,
-		Coinbase:   bt.json.Genesis.Coinbase,
-		Alloc:      bt.json.Pre,
-		BaseFee:    bt.json.Genesis.BaseFee,
+		Nonce:      t.json.Genesis.Nonce.Uint64(),
+		Timestamp:  t.json.Genesis.Timestamp,
+		ParentHash: t.json.Genesis.ParentHash,
+		ExtraData:  t.json.Genesis.ExtraData,
+		GasLimit:   t.json.Genesis.GasLimit,
+		GasUsed:    t.json.Genesis.GasUsed,
+		Difficulty: t.json.Genesis.Difficulty,
+		Mixhash:    t.json.Genesis.MixHash,
+		Coinbase:   t.json.Genesis.Coinbase,
+		Alloc:      t.json.Pre,
+		BaseFee:    t.json.Genesis.BaseFee,
 	}
 }
 
@@ -181,10 +179,10 @@ See https://github.com/ethereum/tests/wiki/Blockchain-Tests-II
 	expected we are expected to ignore it and continue processing and then validate the
 	post state.
 */
-func (bt *BlockTest) insertBlocks(m *stages.MockSentry) ([]btBlock, error) {
+func (t *BlockTest) insertBlocks(m *stages.MockSentry) ([]btBlock, error) {
 	validBlocks := make([]btBlock, 0)
 	// insert the test blocks, which will execute all transaction
-	for bi, b := range bt.json.Blocks {
+	for bi, b := range t.json.Blocks {
 		cb, err := b.decode()
 		if err != nil {
 			if b.BlockHeader == nil {
@@ -283,9 +281,9 @@ func validateHeader(h *btHeader, h2 *types.Header) error {
 	return nil
 }
 
-func (bt *BlockTest) validatePostState(statedb *state.IntraBlockState) error {
+func (t *BlockTest) validatePostState(statedb *state.IntraBlockState) error {
 	// validate post state accounts in test file against what we have in state db
-	for addr, acct := range bt.json.Post {
+	for addr, acct := range t.json.Post {
 		// address is indirectly verified by the other fields, as it's the db key
 		code2 := statedb.GetCode(addr)
 		balance2 := statedb.GetBalance(addr)
@@ -311,9 +309,9 @@ func (bt *BlockTest) validatePostState(statedb *state.IntraBlockState) error {
 	return nil
 }
 
-func (bt *BlockTest) validateImportedHeaders(tx kv.Tx, validBlocks []btBlock) error {
+func (t *BlockTest) validateImportedHeaders(tx kv.Tx, validBlocks []btBlock) error {
 	// to get constant lookup when verifying block headers by hash (some tests have many blocks)
-	bmap := make(map[libcommon.Hash]btBlock, len(bt.json.Blocks))
+	bmap := make(map[libcommon.Hash]btBlock, len(t.json.Blocks))
 	for _, b := range validBlocks {
 		bmap[b.BlockHeader.Hash] = b
 	}

@@ -23,9 +23,7 @@ import (
 	"sync/atomic"
 
 	"github.com/holiman/uint256"
-
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/core/vm"
@@ -54,7 +52,7 @@ func (a *account) exists() bool {
 
 type accountMarshaling struct {
 	Balance *hexutil.Big
-	Code    hexutility.Bytes
+	Code    hexutil.Bytes
 }
 
 type prestateTracer struct {
